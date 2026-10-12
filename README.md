@@ -6,14 +6,20 @@ QR Print Bridge is a Windows-first print station for stationery shops and cyberc
 
 - Customer and vendor can be on different networks.
 - Vendor must have the desktop app open and connected. If offline, the customer submission fails; there is no offline queue.
-- Supabase handles vendor login and the vendor profile only.
-- Customer documents are not stored in Supabase Storage or a job database.
-- A relay forwards file data in transit; it must not persist file contents.
+- Supabase handles vendor login, private temporary file storage, and the print
+  job queue.
+- Customer documents are deleted after a successful print; expired uploads are
+  cleaned up separately.
+- The WebSocket relay remains available as a temporary fallback while the
+  Supabase job flow is verified.
 - The vendor's computer prints through its locally configured Windows printer.
 
 ## Current implementation status
 
-The cross-network relay flow is implemented: the vendor authenticates with Supabase, the dashboard QR uses the stable `vendor_profiles.slug`, and customers stream supported files through the WebSocket relay into the existing Windows print workflow. A real phone-on-mobile-data to vendor-on-another-network print test is still required before calling the product end-to-end verified.
+The Supabase upload and vendor job-consumer flow is implemented alongside the
+temporary relay fallback. A real phone-on-mobile-data to vendor-on-another-
+network print test is still required before calling the product end-to-end
+verified.
 
 See:
 

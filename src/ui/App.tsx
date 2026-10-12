@@ -1,4 +1,5 @@
 import { connectVendorRelay, type RelayStatus } from "../lib/vendorRelay";
+import { connectVendorJobs } from "../lib/vendorJobs";
 import { FormEvent, SyntheticEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
@@ -66,6 +67,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   const [relayStatus, setRelayStatus] = useState<RelayStatus>("offline");
+  const [cloudJobsConnected, setCloudJobsConnected] = useState(false);
 
   const [relayMessage, setRelayMessage] = useState("");
 
@@ -86,6 +88,14 @@ export default function App() {
 
     return disconnect;
   }, [session?.access_token]);
+
+  useEffect(() => {
+    if (!session?.user.id || !supabase) {
+      setCloudJobsConnected(false);
+      return;
+    }
+    return connectVendorJobs(session.user.id, setCloudJobsConnected);
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (!supabase) {
@@ -410,7 +420,11 @@ export default function App() {
             <span className="pill-divider" />
             <Wifi size={14} />
             <span>
-              {relayStatus === "online" ? "Relay connected" : "Relay offline"}
+              {cloudJobsConnected
+                ? "Cloud jobs connected"
+                : relayStatus === "online"
+                  ? "Relay connected"
+                  : "Waiting for jobs"}
             </span>
           </div>
           <div

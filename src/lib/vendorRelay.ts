@@ -156,7 +156,11 @@ export function connectVendorRelay(
             hostStart.catch((error) => sendPrintFailure(message.jobId!, error));
           }
 
-          if (message.type === "print:end" && jobs.has(message.jobId)) {
+          if (
+            message.type === "print:end" &&
+            message.jobId &&
+            jobs.has(message.jobId)
+          ) {
             const job = jobs.get(message.jobId)!;
             if (job.ended) return;
             job.ended = true;

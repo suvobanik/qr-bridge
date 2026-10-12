@@ -1,40 +1,49 @@
-# Agent Instructions — QR Print Bridge
+# QR Print Bridge — Agent Instructions
 
-## Mission
-Build a simple Windows-first print station. A vendor signs in to the desktop app, leaves it running, and displays a permanent vendor QR code. A customer scans it on a phone, selects a PDF/image and print options, and submits. The customer's file should be streamed live to the vendor's running desktop app, which uses the local Windows printer.
+## Product Goal
 
-## Hard product constraints
-- Keep the product simple; vendor setup should be minimal.
-- Customers must be able to use any network. Do not require the customer's phone and vendor laptop to share Wi-Fi.
-- Vendor QR/URL must be stable across app restarts; do not use per-launch LAN IPs or session tokens in the permanent QR.
-- Supabase is for vendor authentication and vendor profile identity only. Do not use Supabase Storage for customer files.
-- Do not create a persistent print-job database or offline queue for this MVP.
-- If the vendor desktop app is not connected, customer submission must fail with a clear unavailable message. Do not claim a job was accepted when it was not.
-- Files may pass through a relay in transit, but the relay must not persist them to disk or object storage.
-- Windows is the initial target. Preserve the existing Electron + React + TypeScript architecture unless a change is necessary.
-- Keep the user's aggressive TLDR preference: concise, direct, one step at a time. Do not jump ahead or rewrite unrelated areas.
+QR Print Bridge is a Windows desktop application for print shops. Customers scan a permanent vendor QR code, configure print settings, and upload PDF/JPG/PNG files through a browser. The vendor desktop app receives jobs, applies supported settings, and prints locally.
 
-## Working rules for agents
-1. Before changing code, inspect `README.md`, this file, and the relevant files under `docs/`.
-2. Inspect the actual current source. Do not assume prior assistant-generated snippets were successfully pasted or that the repository matches a prior ZIP.
-3. Make one coherent change at a time. State exactly which files to edit and provide complete code for each requested file when asked.
-4. Preserve existing UI and working behavior unless the task explicitly changes it.
-5. Never invent filenames, APIs, IPC methods, environment variables, or database columns. Confirm them in source first.
-6. Do not expose `SUPABASE_SERVICE_ROLE_KEY` in any `VITE_*` variable, renderer code, customer page, committed file, or logs.
-7. Validate message type, vendor identity, MIME type, file size, and transfer state on the server. Treat all customer input as untrusted.
-8. Do not trust client-supplied vendor IDs. Resolve the vendor using the permanent public slug and the authenticated vendor session.
-9. Do not log document bytes, access tokens, passwords, or customer file contents.
-10. Do not claim file transfer or printing works until an end-to-end test has passed. `print:received` means relay receipt only; a printer result is a separate state.
-11. After edits, run available typecheck/build/tests and report what was actually run and what remains unverified.
-12. Keep docs updated when architecture, protocol, environment variables, or implementation status changes.
+## Architecture
 
-## Current architecture target
-- Desktop host: Electron + React + TypeScript; uses existing `window.printHost` preload bridge for local print operations.
-- Vendor identity: Supabase Auth plus `public.vendor_profiles`.
-- Customer page: browser page, no customer account required.
-- Live connection: WebSocket relay hosted publicly, using `wss://` in production.
-- File flow: customer browser -> relay memory/buffers -> connected vendor desktop -> local print handling.
-- No offline queue or durable file/job storage.
+- **Frontend:** React + TypeScript + Vite.
+- **Desktop:** Electron on Windows.
+- **Authentication and database:** Supabase Auth + Postgres.
+- **File storage:** Private Supabase Storage bucket.
+- **Job notifications:** Supabase Realtime.
+- **Recovery:** Fetch pending jobs on startup/reconnect; poll every 60 seconds only when Realtime is disconnected.
+- **Guest hosting:** Vercel.
+- **Cleanup:** Delete files after successful printing; GitHub Actions performs fallback deletion of files older than 24 hours.
+- Do not introduce a separate relay server unless explicitly requested.
 
-## Current caveats
-The relay and client code are in-progress. The customer page has not yet been integrated with the relay. The vendor helper currently handles connection status but not incoming print messages. The existing dashboard QR still comes from `window.printHost.getState()` and is the old local-network URL. Do not describe cross-network printing as complete.
+## Development Rules
+
+1. Inspect relevant source files and documentation before editing.
+2. Make the smallest change that solves the requested problem.
+3. Preserve existing architecture, UI, naming, and printing workflow unless change is necessary.
+4. Do not redesign, refactor unrelated code, add dependencies, or introduce features without approval.
+5. Work in small, verifiable steps. Do not jump ahead.
+6. Never claim code, deployment, SQL, or configuration was tested unless it actually was.
+7. Distinguish implemented, tested, deployed, and manually configured functionality.
+8. If a dashboard action, secret, or SQL migration is required, provide exact instructions.
+9. Keep documentation synchronized with implementation.
+10. Prefer concise responses and low-cost solutions.
+
+## Security
+
+- Never expose the Supabase service-role key in browser code, Electron renderer code, or public environment variables.
+- Use a private Storage bucket and restrictive RLS policies.
+- Every job must be associated with the correct vendor.
+- Validate file type, size, job ownership, and print options.
+- Treat Realtime messages as notifications, not authoritative job records.
+- Prevent duplicate queue insertion and printing.
+- Do not automatically print arbitrary remote jobs without the vendor's configured approval and safety limits.
+
+## Print Settings
+
+Customers may request copies, page range, orientation, color/grayscale, and duplex.
+The desktop app must validate and apply supported options. Never silently claim an unsupported option was applied.
+
+## Validation
+
+After changes, run relevant type checks, builds, and tests. Report exact results and remaining manual steps. Do not proceed to the next implementation step until the current step is validated or its blockers are documented.

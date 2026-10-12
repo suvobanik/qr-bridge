@@ -9,6 +9,7 @@ import {
   FileText,
   Image as ImageIcon,
 } from "lucide-react";
+import { supabase } from "./lib/supabase";
 import "./ui/guest.css";
 
 interface Job {
@@ -27,6 +28,7 @@ function GuestApp() {
   const slug =
     querySlug ||
     (routeParts[0] === "v" ? routeParts[1] || "" : routeParts.at(-1) || "");
+  const useCloudJobs = Boolean(supabase);
   const relayUrl = import.meta.env.VITE_RELAY_URL as string | undefined;
   const socketRef = useRef<WebSocket | null>(null);
   const readyRef = useRef<{
@@ -41,6 +43,28 @@ function GuestApp() {
   const [drag, setDrag] = useState(false);
 
   useEffect(() => {
+    if (useCloudJobs) {
+      if (!slug) {
+        setAvailable(false);
+        setError("This print station link is not configured correctly.");
+        return;
+      }
+      supabase!
+        .from("vendor_profiles")
+        .select("id")
+        .eq("slug", slug)
+        .eq("accepting_jobs", true)
+        .maybeSingle()
+        .then(({ data, error: profileError }) => {
+          if (profileError || !data) {
+            setAvailable(false);
+            setError("This print station is currently unavailable.");
+            return;
+          }
+          setAvailable(true);
+        });
+      return;
+    }
     if (!relayUrl || !slug) {
       setAvailable(false);
       setError("This print station link is not configured correctly.");
@@ -122,7 +146,7 @@ function GuestApp() {
       socket.close();
       socketRef.current = null;
     };
-  }, [relayUrl, slug]);
+  }, [relayUrl, slug, useCloudJobs]);
 
   function choose(nextFile?: File) {
     setError("");
@@ -143,7 +167,10 @@ function GuestApp() {
     event.preventDefault();
     const socket = socketRef.current;
     if (!file || busy) return;
-    if (!socket || socket.readyState !== WebSocket.OPEN || available !== true) {
+    if (
+      (!useCloudJobs && (!socket || socket.readyState !== WebSocket.OPEN)) ||
+      available !== true
+    ) {
       setError(
         "The print station is currently unavailable. Try again shortly.",
       );
@@ -152,6 +179,50 @@ function GuestApp() {
     setBusy(true);
     setError("");
     try {
+      if (useCloudJobs) {
+        const { data: reservation, error: reserveError } = await supabase!.rpc(
+          "reserve_guest_print_job",
+          {
+            p_vendor_slug: slug,
+            p_original_name: file.name,
+            p_mime_type: file.type,
+            p_file_size: file.size,
+            p_print_settings: {},
+          },
+        );
+        if (reserveError) throw reserveError;
+        const reserved = Array.isArray(reservation)
+          ? reservation[0]
+          : reservation;
+        if (!reserved?.job_id || !reserved.storage_path) {
+          throw new Error("The print station returned an invalid job.");
+        }
+        setJob({
+          id: reserved.job_id,
+          status: "uploading",
+          message: "Uploading your file securely.",
+        });
+        const { error: uploadError } = await supabase!.storage
+          .from("print-jobs")
+          .upload(reserved.storage_path, file, {
+            contentType: file.type,
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+        const { error: completeError } = await supabase!.rpc(
+          "complete_guest_print_job",
+          { p_job_id: reserved.job_id },
+        );
+        if (completeError) throw completeError;
+        setBusy(false);
+        setJob({
+          id: reserved.job_id,
+          status: "pending",
+          message: "File received. Waiting for the print station.",
+        });
+        return;
+      }
+      if (!socket) throw new Error("The print station relay is unavailable.");
       const ready = new Promise<string>((resolve, reject) => {
         readyRef.current = { resolve, reject };
         window.setTimeout(
@@ -307,8 +378,8 @@ function GuestApp() {
             <div className="guest-safe">
               <ShieldCheck size={17} />
               <span>
-                Your file is streamed to this station and is not stored by the
-                relay.
+                Your file is stored privately until the print station finishes
+                the job.
               </span>
             </div>
             <button

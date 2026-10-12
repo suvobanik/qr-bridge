@@ -1,61 +1,68 @@
-# Implementation Plan — One Step at a Time
+# Implementation Plan
 
-Keep changes small and test each step before continuing.
+Implement in small, independently verifiable steps.
 
-## Phase 1 — Vendor connection foundation
+## Step 1 — Supabase Schema and Security
 
-- [x] Create `relay/package.json` and install dependencies.
-- [x] Create initial `relay/server.cjs`.
-- [x] Create `src/lib/vendorRelay.ts` connection helper.
-- [x] Confirm helper is present in the real working tree and TypeScript compiles.
-- [x] Integrate relay status into `src/ui/App.tsx` and confirm status reflects connection lifecycle.
-- [x] Reconnect with the current Supabase session and clean logout.
+- Verify vendor_profiles, unique slug, and RLS.
+- Create or verify the jobs table and required indexes.
+- Create a private Storage bucket.
+- Add ownership and access policies.
+- Define upload limits and allowed file types.
 
-## Phase 2 — Stable vendor identity / QR
+**Exit criteria:** SQL applies successfully and cross-vendor access is denied.
 
-- [ ] Verify the signup trigger creates `vendor_profiles` for every new auth user.
-- [x] Add a safe way to load the authenticated vendor's slug.
-- [x] Define stable public route: `https://<customer-domain>/v/<slug>`.
-- [x] Generate QR from that public URL, not `window.printHost.getState().guestUrl`.
-- [ ] Add a public-safe vendor lookup that reveals only necessary fields.
+## Step 2 — Guest Upload
 
-## Phase 3 — Customer live connection
+- Generate stable guest URLs from vendor slugs.
+- Check whether the vendor accepts jobs.
+- Add customer print settings.
+- Upload files to private Storage.
+- Create a job record with metadata and options.
 
-- [x] Update `src/guest.tsx` to read vendor slug from route/query.
-- [x] Connect to relay with `role=customer&slug=<slug>`.
-- [x] Show online/unavailable/busy states clearly.
-- [x] Reject submission immediately if vendor is offline.
-- [x] Validate file extension, MIME type, and size client-side (server validates independently).
+**Exit criteria:** A customer can upload a valid file and create one job for the correct vendor.
 
-## Phase 4 — Live file streaming
+## Step 3 — Vendor Job Retrieval
 
-- [x] Implement `print:start` metadata exchange.
-- [x] Send file as bounded binary chunks (target 256 KiB per chunk).
-- [x] Implement relay backpressure and upload deadlines.
-- [x] Implement vendor-side binary receiver and bounded assembly/streaming.
-- [x] Connect received file to existing Electron print IPC/local service.
-- [x] Support cancellation and cleanup on disconnect/error.
-- [x] Make transfer state machine reject out-of-order, duplicate, or excess messages.
+- Fetch pending jobs at startup and login.
+- Subscribe to relevant Realtime events.
+- Fetch authoritative records after notifications.
+- Add 60-second fallback polling only while Realtime is disconnected.
+- Reconcile pending jobs after reconnect.
 
-## Phase 5 — Printing and acknowledgements
+**Exit criteria:** New jobs appear and missed notifications do not lose jobs.
 
-- [x] Respect Auto-Approve OFF by requiring vendor approval before printing.
-- [x] Respect Auto-Approve ON only after safety validation and vendor opt-in.
-- [x] Report separate states: upload complete, awaiting approval, printing, print command completed, failed/rejected.
-- [x] Do not call a job “printed” just because bytes arrived at the relay.
-- [x] Release vendor busy state on every terminal path.
+## Step 4 — Printing Integration
 
-## Phase 6 — Deployment and security
+- Preserve existing approval and auto-approval behavior.
+- Validate print settings.
+- Apply supported settings through the Windows printing workflow.
+- Add duplicate protection and failure recovery.
+- Delete files after confirmed successful printing.
 
-- [ ] Deploy relay to a public WebSocket-capable host with TLS/WSS.
-- [ ] Host customer page over HTTPS.
-- [x] Add rate limits, concurrent connection limits, per-vendor quotas, and timeouts.
-- [x] Add MIME/signature validation and safe temporary-file cleanup.
-- [x] Validate WebSocket origins and HTTP request behavior.
-- [ ] Keep service-role key only in relay server environment.
-- [ ] Run cross-network test using phone mobile data and vendor on a different network.
-- [ ] Test vendor offline, busy, network loss mid-upload, oversized file, invalid file, rejected job, printer failure, and app restart.
+**Exit criteria:** End-to-end print tests pass without duplicate jobs or incorrect settings.
 
-## Definition of done
+## Step 5 — Expiration Cleanup
 
-A customer on a different network can scan a stable QR and send a supported file to a connected vendor app; the relay does not persist the file; offline vendor requests fail clearly; the local print workflow honors approval settings; and the flow has been tested end-to-end with documented limitations.
+- Add an authenticated GitHub Actions cleanup script.
+- Store secrets in GitHub Actions secrets.
+- Delete actual Storage objects older than 24 hours.
+- Make cleanup safe to rerun.
+
+**Exit criteria:** Expired files are deleted and recent files are retained.
+
+## Step 6 — Deployment
+
+- Deploy the guest page to Vercel.
+- Configure production Supabase environment variables.
+- Configure GitHub Actions secrets and schedule.
+- Build and package the Windows application.
+- Test the installed application on a clean Windows environment.
+
+**Exit criteria:** Production upload, retrieval, approval, printing, and cleanup work.
+
+## Step 7 — Abuse and Recovery Testing
+
+Test vendor offline, invalid files, oversized files, duplicate submissions, remote use of a photographed QR, Realtime disconnects, printer failures, and Storage cleanup.
+
+Do not mark the project production-ready until all critical paths are verified.

@@ -46,6 +46,7 @@ app.whenReady().then(async () => {
       mainWindow?.webContents.send("relay:result", {
         jobId: job.id,
         success: job.status === "printed",
+        status: job.status,
         message: job.message,
       }),
   });

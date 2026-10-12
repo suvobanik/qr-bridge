@@ -21,6 +21,7 @@ interface Window {
       callback: (result: {
         jobId: string;
         success: boolean;
+        status: string;
         message: string;
       }) => void,
     ) => void;

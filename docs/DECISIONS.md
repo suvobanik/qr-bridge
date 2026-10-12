@@ -1,48 +1,65 @@
-# Architecture Decision Record
+# Architecture Decisions
 
-## Accepted decisions
+## D1 — Windows Desktop Printing
 
-### D-001 — Windows-first desktop host
+**Decision:** Keep Electron as the vendor-side printing application.
 
-**Decision:** Build the initial vendor host using Electron + React + TypeScript, targeting Windows 10/11.
-**Reason:** Existing local printing implementation is Windows-oriented; keep the MVP focused.
+**Reason:** Printer access and printing remain local to the shop.
 
-### D-002 — Supabase Auth + one vendor profile table
+## D2 — Permanent Vendor QR
 
-**Decision:** Use Supabase Auth for login/signup and `public.vendor_profiles` for vendor metadata. Do not create a custom password table.
-**Reason:** Minimize setup and avoid handling passwords directly.
+**Decision:** Use a stable URL based on a unique vendor slug.
 
-### D-003 — Persist vendor session locally
+**Reason:** The QR should survive logouts, restarts, and application updates.
 
-**Decision:** Use Supabase client session persistence (`persistSession: true`, `storage: localStorage`) so the app can restore login after closing/reopening.
-**Constraint:** Logout should clear the session. Desktop app and PWA/browser origins maintain separate sessions.
+## D3 — Supabase Storage
 
-### D-004 — Stable QR identity
+**Decision:** Use a private Supabase Storage bucket for temporary uploads.
 
-**Decision:** QR URL must use a stable vendor slug, not a LAN IP or per-launch session token.
-**Reason:** Vendor prints/sticks the QR at the shop; it must survive restarts and network changes.
+**Reason:** Avoid maintaining a separate public file-transfer relay.
 
-### D-005 — Live relay, no file persistence
+## D4 — Database as Source of Truth
 
-**Decision:** Use a public WebSocket relay to stream files to a connected vendor device. Do not store file contents in Supabase Storage or a persistent job queue.
-**Reason:** User wants cross-network delivery without cloud file storage.
+**Decision:** Store job metadata and status in Postgres.
 
-### D-006 — Offline means unavailable
+**Reason:** Pending jobs must survive missed notifications and application restarts.
 
-**Decision:** If vendor is disconnected, reject/fail customer submission. No offline queue or delayed delivery.
-**Reason:** User explicitly prefers live-only delivery and simplicity.
+## D5 — Realtime Plus Recovery
 
-### D-007 — Relay over pure P2P for MVP
+**Decision:** Use Supabase Realtime for job notifications. Fetch pending jobs on startup/reconnect and poll every 60 seconds only while Realtime is disconnected.
 
-**Decision:** Use a relay server for cross-network connections.
-**Reason:** Browser-to-laptop connections across NAT/firewalls are unreliable; a relay is simpler than WebRTC signaling and ICE handling.
+**Reason:** Reduce unnecessary database requests without losing jobs when notifications are missed.
 
-## Not yet decided
+## D6 — Temporary File Retention
 
-- Production hosting provider and relay domain.
-- Permanent public web domain and final customer route.
-- Email confirmation policy in Supabase.
-- Maximum concurrent customers per vendor is bounded by the vendor connection and local host capacity; transfers are independently keyed by `jobId`.
-- Final supported file MIME types and print options.
-- Exact end-to-end acknowledgement states and timeout values.
-- Whether customer can see printer busy vs vendor offline.
+**Decision:** Delete files after confirmed successful printing and run a 24-hour fallback cleanup through GitHub Actions.
+
+**Reason:** Minimize retained customer documents.
+
+## D7 — Customer Print Options
+
+**Decision:** Allow customers to select supported print settings before submitting a job.
+
+**Reason:** Reduce manual work for vendors.
+
+**Constraint:** The desktop application must validate and apply options. Unsupported options must be reported clearly.
+
+## D8 — Auto-Approval Safety
+
+**Decision:** Auto-approval must respect configurable limits and vendor controls.
+
+**Reason:** A permanent QR can be photographed and used remotely.
+
+**Constraint:** A permanent QR does not prove physical presence. Active-session controls, quotas, and optional rotating codes may reduce abuse.
+
+## D9 — Minimal Changes
+
+**Decision:** Preserve existing UI, architecture, and printing workflow unless the requested feature requires a change.
+
+**Reason:** Reduce regressions and implementation time.
+
+## D10 — Deployment
+
+**Decision:** Use Vercel for the guest page, Supabase for backend services, and GitHub Actions for scheduled cleanup.
+
+**Constraint:** Free-tier quotas apply. No claim of unlimited usage or guaranteed zero cost is made.
