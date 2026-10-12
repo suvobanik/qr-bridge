@@ -28,30 +28,33 @@ See:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — target architecture
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — next steps
 
-## Project structure (observed)
+## Project structure
 
 ```text
-src/
-  guest.tsx
-  main.tsx
-  vite-env.d.ts
-  lib/
-    supabase.ts
-    vendorRelay.ts
-  ui/
-    App.tsx
-    guest.css
-    styles.css
-relay/
-  package.json
-  server.cjs
+guest/
+  index.html
+  src/guest.tsx
+  src/lib/supabase.ts
+  src/ui/guest.css
+  vite.config.ts
+vendor-desktop/
+  index.html
+  src/main.tsx
+  src/lib/
+  src/ui/
+  electron/
+  vite.config.ts
+supabase/
+docs/
 ```
 
-The `relay/` files were created during implementation. Check the actual repository before assuming every listed file exists.
+The root package uses npm workspaces. The customer app and desktop app have
+separate manifests, builds, and output directories. The relay fallback remains
+documented and is not part of the two application workspaces.
 
 ## Environment variables
 
-### Root `.env` (Vite/desktop renderer)
+### Root `.env` (shared Vite environment)
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
@@ -60,7 +63,7 @@ VITE_RELAY_URL=ws://localhost:47832/ws
 VITE_GUEST_BASE_URL=https://printbridge.example
 ```
 
-Use `ws://` only for local development. Production should use `wss://` with a publicly reachable TLS endpoint, and `VITE_GUEST_BASE_URL` should be the HTTPS domain hosting `guest.html`. Vite environment variables are exposed to the client; never put a service-role/secret key in a `VITE_*` variable.
+Use `ws://` only for local development. Production should use `wss://` with a publicly reachable TLS endpoint, and `VITE_GUEST_BASE_URL` should be the HTTPS domain hosting the guest app. Vite environment variables are exposed to the client; never put a service-role/secret key in a `VITE_*` variable.
 
 ### `relay/.env` (server only)
 
@@ -82,6 +85,18 @@ From project root:
 npm install
 npm run dev
 ```
+
+Build or typecheck either workspace directly:
+
+```powershell
+npm run build:guest
+npm run build:desktop
+npm run typecheck
+```
+
+The desktop package is started by `npm run dev` and uses its local
+`vendor-desktop/dist` output when packaged. The guest package builds to
+`guest/dist` and is independently deployable to Vercel.
 
 In another terminal, run the relay:
 

@@ -1,6 +1,6 @@
 # Relay Protocol
 
-This is the implemented contract shared by `relay/server.cjs`, `src/lib/vendorRelay.ts`, and `src/guest.tsx`.
+This is the implemented contract shared by `relay/server.cjs`, `vendor-desktop/src/lib/vendorRelay.ts`, and `guest/src/guest.tsx`.
 
 ## Connection
 

@@ -8,6 +8,9 @@ import {
   AlertCircle,
   FileText,
   Image as ImageIcon,
+  QrCode,
+  Upload,
+  PackageCheck,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import "./ui/guest.css";
@@ -22,12 +25,112 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const CHUNK_SIZE = 256 * 1024;
 const ALLOWED_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
-function GuestApp() {
+function LandingPage() {
+  return (
+    <main className="landing-page">
+      <nav className="landing-nav" aria-label="Main navigation">
+        <a className="landing-brand" href="/" aria-label="Espresso Print home">
+          <span className="landing-brand-mark">
+            <Printer size={18} />
+          </span>
+          <span>
+            espresso <strong>print</strong>
+          </span>
+        </a>
+        <a className="landing-nav-link" href="#how-it-works">
+          How it works
+        </a>
+      </nav>
+
+      <section className="landing-hero">
+        <div className="landing-hero-copy">
+          <p className="landing-eyebrow">
+            <span /> SIMPLE PRINTING, WHEREVER YOU ARE
+          </p>
+          <h1>Your documents. Printed in minutes.</h1>
+          <p className="landing-intro">
+            Scan a print shop&apos;s QR code, upload your file from your phone,
+            and collect your pages when they&apos;re ready. No app or account
+            required.
+          </p>
+          <a className="landing-cta" href="#how-it-works">
+            See how it works <span aria-hidden="true">→</span>
+          </a>
+          <p className="landing-note">
+            At a print shop? Scan its QR code to get started.
+          </p>
+        </div>
+        <div className="landing-visual" aria-hidden="true">
+          <div className="paper-sheet paper-back" />
+          <div className="paper-sheet paper-front">
+            <div className="paper-topline" />
+            <div className="paper-title" />
+            <div className="paper-line paper-line-wide" />
+            <div className="paper-line" />
+            <div className="paper-line paper-line-short" />
+            <div className="paper-qr">
+              <QrCode size={82} strokeWidth={1.25} />
+            </div>
+            <span className="paper-stamp">READY TO PRINT</span>
+          </div>
+          <div className="landing-visual-label">
+            <Printer size={15} />
+            <span>Print shop ready</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="how-section" id="how-it-works">
+        <div className="section-heading">
+          <p className="landing-eyebrow">HOW IT WORKS</p>
+          <h2>Three easy steps.</h2>
+        </div>
+        <div className="steps-grid">
+          <article className="step-item">
+            <div className="step-icon">
+              <QrCode size={21} />
+            </div>
+            <span className="step-number">01</span>
+            <h3>Scan QR</h3>
+            <p>Find the Espresso Print code at your local print shop.</p>
+          </article>
+          <article className="step-item">
+            <div className="step-icon">
+              <Upload size={21} />
+            </div>
+            <span className="step-number">02</span>
+            <h3>Upload file</h3>
+            <p>Choose a PDF or image right from your phone.</p>
+          </article>
+          <article className="step-item">
+            <div className="step-icon">
+              <PackageCheck size={21} />
+            </div>
+            <span className="step-number">03</span>
+            <h3>Collect prints</h3>
+            <p>Pick up your pages when the shop has finished printing.</p>
+          </article>
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <span>
+          espresso <strong>print</strong>
+        </span>
+        <span>Simple printing for real life.</span>
+      </footer>
+    </main>
+  );
+}
+
+function UploadPage() {
   const routeParts = window.location.pathname.split("/").filter(Boolean);
   const querySlug = new URLSearchParams(window.location.search).get("slug");
   const slug =
     querySlug ||
-    (routeParts[0] === "v" ? routeParts[1] || "" : routeParts.at(-1) || "");
+    (routeParts[0] === "v"
+      ? routeParts[1] || ""
+      : routeParts[routeParts.length - 1] || "");
   const useCloudJobs = Boolean(supabase);
   const relayUrl = import.meta.env.VITE_RELAY_URL as string | undefined;
   const socketRef = useRef<WebSocket | null>(null);
@@ -404,6 +507,12 @@ function GuestApp() {
       <p className="guest-bottom">No account. No app download. Just print.</p>
     </main>
   );
+}
+
+function GuestApp() {
+  const querySlug = new URLSearchParams(window.location.search).get("slug");
+  if (window.location.pathname === "/" && !querySlug) return <LandingPage />;
+  return <UploadPage />;
 }
 
 createRoot(document.getElementById("root")!).render(

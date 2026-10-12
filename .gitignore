@@ -1,3 +1,6 @@
 node_modules/
 .env
 dist/
+guest/dist/
+vendor-desktop/dist/
+vendor-desktop/release/

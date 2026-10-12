@@ -2,16 +2,16 @@
 
 ## Project folders
 
-- Root: Electron + Vite + React app.
-- `src/ui/App.tsx`: vendor login/signup and dashboard.
-- `src/lib/supabase.ts`: Supabase browser/renderer client.
-- `src/lib/vendorRelay.ts`: vendor WebSocket connection helper.
-- `src/guest.tsx`: customer upload page.
+- Root: npm workspaces, Supabase migrations, and documentation.
+- `vendor-desktop/src/ui/App.tsx`: vendor login/signup and dashboard.
+- `vendor-desktop/src/lib/supabase.ts`: Supabase renderer client.
+- `vendor-desktop/src/lib/vendorRelay.ts`: vendor WebSocket connection helper.
+- `guest/src/guest.tsx`: customer upload page.
 - `relay/`: Node.js WebSocket relay service.
 
 ## Environment files
 
-Root `.env`:
+Root `.env` (loaded by both Vite workspaces):
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
@@ -38,6 +38,10 @@ Terminal 1, project root:
 npm install
 npm run dev
 ```
+
+The guest app can be built independently with `npm run build:guest`; the
+desktop renderer can be built and checked with `npm run build:desktop` and
+`npm run typecheck`.
 
 Terminal 2, relay:
 
@@ -67,7 +71,7 @@ Health check: open `http://localhost:47832/health`.
 
 ## Public deployment
 
-A local `localhost` relay only works for processes on the same machine. Deploy the relay to a public WebSocket-capable host with TLS, set root `VITE_RELAY_URL` to `wss://.../ws`, set `VITE_GUEST_BASE_URL` to the HTTPS customer-page origin, and rebuild/redeploy the desktop app. Host the generated `dist/guest.html` and its assets at that origin. The QR format is `https://<guest-host>/v/<vendor-profile-slug>`.
+A local `localhost` relay only works for processes on the same machine. Deploy the relay to a public WebSocket-capable host with TLS, set root `VITE_RELAY_URL` to `wss://.../ws`, set `VITE_GUEST_BASE_URL` to the HTTPS customer-page origin, and rebuild/redeploy the desktop app. Deploy `guest/` to Vercel with Root Directory `guest`, Build Command `npm run build`, and Output Directory `dist`. The QR format is `https://<guest-host>/v/<vendor-profile-slug>`.
 
 ## Windows packaging note
 
