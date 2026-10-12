@@ -35,6 +35,38 @@ function runPowerShell(script, args = []) {
   );
 }
 
+function normalizePrintOptions(options = {}) {
+  const copies = Number.isInteger(options.copies)
+    ? Math.min(99, Math.max(1, options.copies))
+    : 1;
+  const pageSize =
+    typeof options.paperSize === "string"
+      ? { name: options.paperSize }
+      : undefined;
+  const pageRanges = Array.isArray(options.pageRanges)
+    ? options.pageRanges
+        .filter(
+          (range) =>
+            Number.isInteger(range?.from) &&
+            Number.isInteger(range?.to) &&
+            range.from >= 0 &&
+            range.to >= range.from,
+        )
+        .map((range) => ({ from: range.from, to: range.to }))
+    : undefined;
+  return {
+    copies,
+    landscape: options.orientation === "landscape",
+    color: options.color !== false,
+    collate: options.collate !== false,
+    duplexMode: ["simplex", "shortEdge", "longEdge"].includes(options.duplex)
+      ? options.duplex
+      : "simplex",
+    pageSize,
+    pageRanges,
+  };
+}
+
 async function getPrinters() {
   if (process.platform !== "win32") return [];
   try {
@@ -60,7 +92,13 @@ async function getDefaultPrinter() {
   }
 }
 
-async function printFile(filePath, mimeType, printerName) {
+async function printFile(
+  filePath,
+  mimeType,
+  printerName,
+  options = {},
+  printPdf,
+) {
   if (process.platform !== "win32")
     throw new Error("This MVP currently supports Windows only.");
   if (!printerName)
@@ -71,28 +109,8 @@ async function printFile(filePath, mimeType, printerName) {
     mimeType === "application/pdf" ||
     filePath.toLowerCase().endsWith(".pdf")
   ) {
-    const candidates = [
-      path.join(
-        process.env.ProgramFiles || "C:\\Program Files",
-        "SumatraPDF",
-        "SumatraPDF.exe",
-      ),
-      path.join(
-        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
-        "SumatraPDF",
-        "SumatraPDF.exe",
-      ),
-    ];
-    const sumatra = candidates.find(fs.existsSync);
-    if (!sumatra)
-      throw new Error(
-        "PDF printing needs SumatraPDF installed. Install it from https://www.sumatrapdfreader.org/download-free-pdf-viewer, then retry. Image printing does not need it.",
-      );
-    await execFileAsync(
-      sumatra,
-      ["-print-to", printerName, "-silent", "-exit-when-done", filePath],
-      { windowsHide: true, timeout: 120000 },
-    );
+    if (!printPdf) throw new Error("PDF printing is not available.");
+    await printPdf(filePath, printerName, normalizePrintOptions(options));
     return;
   }
   // Windows native image printing via System.Drawing and PrintDocument. No browser print dialog.
@@ -123,7 +141,7 @@ try {
   await runPowerShell(script, [filePath, printerName]);
 }
 
-async function startHost({ getLanIPv4, onChange, onRelayResult }) {
+async function startHost({ getLanIPv4, onChange, onRelayResult, printPdf }) {
   const app = express();
   const server = http.createServer(app);
   const upload = multer({
@@ -204,6 +222,7 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
       relayBytes: 0,
       relayFirstChunk: Buffer.alloc(0),
       relayDone: false,
+      printOptions: metadata.options || {},
     };
     jobs.unshift(job);
     notify();
@@ -256,6 +275,58 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
     if (autoApprove) processJob(job);
     return { status: job.status, message: job.message };
   }
+  async function queueCloudJob(metadata, data, printNow) {
+    if (!metadata || typeof metadata !== "object")
+      throw new Error("Invalid print metadata.");
+    if (
+      typeof metadata.jobId !== "string" ||
+      typeof metadata.name !== "string" ||
+      !metadata.name.trim() ||
+      !ALLOWED_MIME_TYPES.has(metadata.mimeType)
+    ) {
+      throw new Error("Unsupported file type.");
+    }
+    if (
+      !Number.isSafeInteger(metadata.size) ||
+      metadata.size < 1 ||
+      metadata.size > MAX_FILE_SIZE ||
+      !Buffer.isBuffer(data) ||
+      data.length !== metadata.size
+    ) {
+      throw new Error("Uploaded file is invalid or incomplete.");
+    }
+    if (!isSupportedSignature(data, metadata.mimeType))
+      throw new Error("File content does not match its declared type.");
+
+    const safeName = path
+      .basename(metadata.name.replace(/\\/g, "/"))
+      .replace(/[\x00-\x1f]/g, "_")
+      .slice(0, 200);
+    const filePath = path.join(
+      UPLOAD_DIR,
+      `${Date.now()}-${randomUUID()}${path.extname(safeName).toLowerCase()}`,
+    );
+    fs.writeFileSync(filePath, data, { flag: "wx", mode: 0o600 });
+    const job = {
+      id: metadata.jobId,
+      originalName: safeName,
+      mimeType: metadata.mimeType,
+      size: metadata.size,
+      status: printNow ? "queued" : "pending",
+      createdAt: new Date().toISOString(),
+      message: printNow ? "Auto-approved" : "Waiting for host approval",
+      path: filePath,
+      relayStream: null,
+      relayBytes: data.length,
+      relayFirstChunk: data.subarray(0, 16),
+      relayDone: true,
+      printOptions: metadata.options || {},
+    };
+    jobs.unshift(job);
+    notify();
+    if (printNow) void processJob(job);
+    return { id: job.id, size: job.size };
+  }
   function relayCancel(id) {
     const job = jobs.find((item) => item.id === id);
     if (!job) return;
@@ -294,7 +365,13 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
       job.status = "printing";
       job.message = "Sent to printer queue";
       notify();
-      await printFile(job.path, job.mimeType, selectedPrinter);
+      await printFile(
+        job.path,
+        job.mimeType,
+        selectedPrinter,
+        job.printOptions || {},
+        printPdf,
+      );
       job.status = "printed";
       job.message = "Submitted to the printer system";
     } catch (e) {
@@ -333,14 +410,12 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
       return res.status(404).json({ error: "Session expired." });
     upload.single("file")(req, res, (err) => {
       if (err)
-        return res
-          .status(400)
-          .json({
-            error:
-              err.code === "LIMIT_FILE_SIZE"
-                ? "Maximum file size is 25 MB."
-                : err.message || "Upload failed.",
-          });
+        return res.status(400).json({
+          error:
+            err.code === "LIMIT_FILE_SIZE"
+              ? "Maximum file size is 25 MB."
+              : err.message || "Upload failed.",
+        });
       if (!req.file)
         return res.status(400).json({ error: "Choose a PDF or image file." });
       const job = {
@@ -416,7 +491,7 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
     },
     clearCompleted: () => {
       for (let i = jobs.length - 1; i >= 0; i--) {
-        if (["printed", "failed", "rejected"].includes(jobs[i].status)) {
+        if (["printed", "rejected"].includes(jobs[i].status)) {
           try {
             fs.unlinkSync(jobs[i].path);
           } catch {}
@@ -426,6 +501,7 @@ async function startHost({ getLanIPv4, onChange, onRelayResult }) {
       notify();
       return publicState();
     },
+    queueCloudJob,
     refreshPrinters: async () => {
       printers = await getPrinters();
       if (!printers.includes(selectedPrinter))

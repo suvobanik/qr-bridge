@@ -8,6 +8,21 @@ type PrintJob = {
   mime_type: string;
   file_size: number;
   status: string;
+  created_at: string;
+  result_message: string | null;
+  error_message: string | null;
+  print_settings: Record<string, unknown>;
+};
+
+export type VendorQueueJob = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  status: string;
+  createdAt: string;
+  message: string;
+  previewUrl?: string;
 };
 
 type JobResult = {
@@ -17,17 +32,21 @@ type JobResult = {
   message: string;
 };
 
-const CHUNK_SIZE = 256 * 1024;
-
 export function connectVendorJobs(
   vendorId: string,
   onStatus: (connected: boolean) => void,
+  onJobs: (jobs: VendorQueueJob[]) => void,
 ) {
-  if (!supabase) return () => {};
+  if (!supabase) {
+    onJobs([]);
+    return () => {};
+  }
 
   let stopped = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   const processing = new Set<string>();
+  const previewUrls = new Map<string, string>();
+  let latestJobs: PrintJob[] = [];
   const channel = supabase.channel(`vendor-print-jobs-${vendorId}`).on(
     "postgres_changes",
     {
@@ -57,6 +76,31 @@ export function connectVendorJobs(
     return error;
   }
 
+  function emitJobs(jobs: PrintJob[]) {
+    const currentIds = new Set(jobs.map((job) => job.id));
+    for (const [id, url] of previewUrls) {
+      if (!currentIds.has(id)) {
+        URL.revokeObjectURL(url);
+        previewUrls.delete(id);
+      }
+    }
+    onJobs(
+      jobs.map((job) => ({
+        id: job.id,
+        originalName: job.original_name,
+        mimeType: job.mime_type,
+        size: job.file_size,
+        status: job.status,
+        createdAt: job.created_at,
+        message:
+          job.result_message ||
+          job.error_message ||
+          (job.status === "pending" ? "Waiting for host approval" : ""),
+        previewUrl: previewUrls.get(job.id),
+      })),
+    );
+  }
+
   async function finishJob(result: JobResult) {
     const values = result.success
       ? {
@@ -84,6 +128,7 @@ export function connectVendorJobs(
         .from("print_jobs")
         .select("storage_path")
         .eq("id", result.jobId)
+        .eq("vendor_id", vendorId)
         .maybeSingle();
       if (job?.storage_path) {
         await supabase!.storage.from("print-jobs").remove([job.storage_path]);
@@ -92,9 +137,11 @@ export function connectVendorJobs(
     processing.delete(result.jobId);
   }
 
-  window.printHost.onRelayResult((result: JobResult) => {
-    if (processing.has(result.jobId)) void finishJob(result);
-  });
+  const unsubscribeRelayResult = window.printHost.onRelayResult(
+    (result: JobResult) => {
+      if (processing.has(result.jobId)) void finishJob(result);
+    },
+  );
 
   async function process(job: PrintJob) {
     if (stopped || processing.has(job.id)) return;
@@ -121,33 +168,30 @@ export function connectVendorJobs(
       if (file.size !== job.file_size)
         throw new Error("Uploaded file is incomplete.");
 
-      await window.printHost.relayStart({
-        jobId: job.id,
-        name: job.original_name,
-        mimeType: job.mime_type,
-        size: file.size,
-        options: {},
-      });
-      const buffer = await file.arrayBuffer();
-      for (let offset = 0; offset < buffer.byteLength; offset += CHUNK_SIZE) {
-        await window.printHost.relayChunk(
-          job.id,
-          buffer.slice(
-            offset,
-            Math.min(offset + CHUNK_SIZE, buffer.byteLength),
-          ),
-        );
-      }
-      await window.printHost.relayEnd(job.id);
+      const existingPreview = previewUrls.get(job.id);
+      if (existingPreview) URL.revokeObjectURL(existingPreview);
+      previewUrls.set(job.id, URL.createObjectURL(file));
+      emitJobs(latestJobs);
+
+      await window.printHost.queueCloudJob(
+        {
+          jobId: job.id,
+          name: job.original_name,
+          mimeType: job.mime_type,
+          size: file.size,
+          options: job.print_settings,
+        },
+        await file.arrayBuffer(),
+        job.status === "queued",
+      );
     } catch (error) {
-      const updateError = await updateJob(job.id, {
+      await updateJob(job.id, {
         status: "failed",
         error_message:
           error instanceof Error
             ? error.message
             : "Could not prepare the file.",
       });
-      if (!updateError) window.printHost.relayCancel(job.id);
       processing.delete(job.id);
     }
   }
@@ -157,13 +201,17 @@ export function connectVendorJobs(
     const { data, error } = await supabase!
       .from("print_jobs")
       .select(
-        "id,vendor_id,storage_path,original_name,mime_type,file_size,status",
+        "id,vendor_id,storage_path,original_name,mime_type,file_size,print_settings,status,created_at,result_message,error_message",
       )
       .eq("vendor_id", vendorId)
-      .in("status", ["pending", "queued"])
       .order("created_at", { ascending: true });
     if (error) return;
-    for (const job of (data || []) as PrintJob[]) void process(job);
+    const jobs = (data || []) as PrintJob[];
+    latestJobs = jobs;
+    emitJobs(jobs);
+    for (const job of jobs) {
+      if (["pending", "queued"].includes(job.status)) void process(job);
+    }
   }
 
   channel.subscribe((status) => {
@@ -177,8 +225,10 @@ export function connectVendorJobs(
     stopped = true;
     if (pollTimer) clearInterval(pollTimer);
     void supabase!.removeChannel(channel);
+    unsubscribeRelayResult();
+    for (const url of previewUrls.values()) URL.revokeObjectURL(url);
+    previewUrls.clear();
     onStatus(false);
-    for (const jobId of processing) window.printHost.relayCancel(jobId);
     processing.clear();
   };
 }

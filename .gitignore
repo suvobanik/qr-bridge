@@ -4,3 +4,4 @@ dist/
 guest/dist/
 vendor-desktop/dist/
 vendor-desktop/release/
+scripts/

@@ -7,6 +7,17 @@ interface Window {
     reject: (id: string) => Promise<any>;
     clearCompleted: () => Promise<any>;
     refreshPrinters: () => Promise<any>;
+    queueCloudJob: (
+      metadata: {
+        jobId: string;
+        name: string;
+        mimeType: string;
+        size: number;
+        options: Record<string, unknown>;
+      },
+      data: ArrayBuffer,
+      printNow: boolean,
+    ) => Promise<any>;
     relayStart: (metadata: {
       jobId: string;
       name: string;
@@ -24,7 +35,7 @@ interface Window {
         status: string;
         message: string;
       }) => void,
-    ) => void;
-    onChange: (callback: () => void) => void;
+    ) => () => void;
+    onChange: (callback: () => void) => () => void;
   };
 }

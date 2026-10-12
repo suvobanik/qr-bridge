@@ -1,6 +1,5 @@
-import { connectVendorRelay, type RelayStatus } from "../lib/vendorRelay";
-import { connectVendorJobs } from "../lib/vendorJobs";
-import { FormEvent, SyntheticEvent, useEffect, useMemo, useState } from "react";
+import { connectVendorJobs, type VendorQueueJob } from "../lib/vendorJobs";
+import { SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 // qrcode does not ship TypeScript declarations in this project.
@@ -8,7 +7,6 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import QRCode from "qrcode";
 import {
   Printer,
-  QrCode,
   ShieldCheck,
   ShieldAlert,
   FileText,
@@ -18,7 +16,6 @@ import {
   RefreshCw,
   Trash2,
   Wifi,
-  ExternalLink,
   Copy,
   CircleHelp,
 } from "lucide-react";
@@ -39,6 +36,7 @@ type Job = {
   status: string;
   createdAt: string;
   message: string;
+  previewUrl?: string;
 };
 type State = {
   host: string;
@@ -65,36 +63,47 @@ export default function App() {
   const [qr, setQr] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [previewJob, setPreviewJob] = useState<Job | null>(null);
 
-  const [relayStatus, setRelayStatus] = useState<RelayStatus>("offline");
   const [cloudJobsConnected, setCloudJobsConnected] = useState(false);
 
-  const [relayMessage, setRelayMessage] = useState("");
+  const cloudJobsRef = useRef<VendorQueueJob[]>([]);
+  const cloudJobIdsRef = useRef(new Set<string>());
+  const refreshInFlightRef = useRef(false);
 
-  useEffect(() => {
-    if (!session?.access_token) {
-      setRelayStatus("offline");
-      setRelayMessage("");
-      return;
-    }
-
-    const disconnect = connectVendorRelay(
-      session.access_token,
-      (status, message) => {
-        setRelayStatus(status);
-        setRelayMessage(message ?? "");
-      },
+  function mergeJobs(localJobs: Job[], cloudJobs = cloudJobsRef.current) {
+    const merged = new Map(
+      localJobs
+        .filter((job) => !cloudJobIdsRef.current.has(job.id))
+        .map((job) => [job.id, job]),
     );
-
-    return disconnect;
-  }, [session?.access_token]);
+    for (const job of cloudJobs) merged.set(job.id, job);
+    return Array.from(merged.values()).sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
+    );
+  }
 
   useEffect(() => {
     if (!session?.user.id || !supabase) {
       setCloudJobsConnected(false);
+      cloudJobsRef.current = [];
+      cloudJobIdsRef.current = new Set();
       return;
     }
-    return connectVendorJobs(session.user.id, setCloudJobsConnected);
+    cloudJobsRef.current = [];
+    cloudJobIdsRef.current = new Set();
+    return connectVendorJobs(session.user.id, setCloudJobsConnected, (jobs) => {
+      cloudJobsRef.current = jobs;
+      cloudJobIdsRef.current = new Set([
+        ...cloudJobIdsRef.current,
+        ...jobs.map((job) => job.id),
+      ]);
+      setState((current) =>
+        current ? { ...current, jobs: mergeJobs(current.jobs, jobs) } : current,
+      );
+    });
   }, [session?.user.id]);
 
   useEffect(() => {
@@ -171,8 +180,11 @@ export default function App() {
   }
 
   async function refresh() {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       const next = await window.printHost.getState();
+      next.jobs = mergeJobs(next.jobs);
       const baseUrl = import.meta.env.VITE_GUEST_BASE_URL as string | undefined;
       const { data: profile, error: profileError } =
         session && supabase
@@ -219,14 +231,18 @@ export default function App() {
           : "Could not prepare the guest QR.",
       );
     } finally {
+      refreshInFlightRef.current = false;
       setLoading(false);
     }
   }
   useEffect(() => {
     refresh();
-    window.printHost.onChange(() => refresh());
+    const unsubscribe = window.printHost.onChange(() => refresh());
     const timer = setInterval(refresh, 2500);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      unsubscribe?.();
+    };
   }, [session?.user.id]);
   const pending = useMemo(
     () => state?.jobs.filter((j) => j.status === "pending").length || 0,
@@ -234,9 +250,8 @@ export default function App() {
   );
   const done = useMemo(
     () =>
-      state?.jobs.filter((j) =>
-        ["printed", "failed", "rejected"].includes(j.status),
-      ).length || 0,
+      state?.jobs.filter((j) => ["printed", "rejected"].includes(j.status))
+        .length || 0,
     [state],
   );
 
@@ -368,6 +383,21 @@ export default function App() {
     );
     refresh();
   }
+  async function clearCompleted() {
+    if (session && supabase) {
+      const { error } = await supabase
+        .from("print_jobs")
+        .delete()
+        .eq("vendor_id", session.user.id)
+        .in("status", ["printed", "rejected"]);
+      if (error) {
+        setNotice(`Could not clear completed jobs: ${error.message}`);
+        return;
+      }
+    }
+    await window.printHost.clearCompleted();
+    await refresh();
+  }
   async function copyUrl() {
     if (!state) return;
     await navigator.clipboard.writeText(state.guestUrl);
@@ -420,11 +450,7 @@ export default function App() {
             <span className="pill-divider" />
             <Wifi size={14} />
             <span>
-              {cloudJobsConnected
-                ? "Cloud jobs connected"
-                : relayStatus === "online"
-                  ? "Relay connected"
-                  : "Waiting for jobs"}
+              {cloudJobsConnected ? "Cloud jobs connected" : "Waiting for jobs"}
             </span>
           </div>
           <div
@@ -583,7 +609,7 @@ export default function App() {
             </div>
             <button
               className="text-button"
-              onClick={() => window.printHost.clearCompleted().then(refresh)}
+              onClick={clearCompleted}
               disabled={!done}>
               <Trash2 size={14} /> Clear completed
             </button>
@@ -625,6 +651,13 @@ export default function App() {
                     <span />
                     {statusLabel[job.status] || job.status}
                   </div>
+                  {job.previewUrl ? (
+                    <button
+                      className="preview-btn"
+                      onClick={() => setPreviewJob(job)}>
+                      Preview
+                    </button>
+                  ) : null}
                   {job.status === "pending" ? (
                     <div className="job-actions">
                       <button
@@ -661,6 +694,38 @@ export default function App() {
           {notice}
           <X size={15} />
         </button>
+      )}
+      {previewJob?.previewUrl && (
+        <div className="preview-backdrop" onClick={() => setPreviewJob(null)}>
+          <section
+            className="preview-dialog"
+            onClick={(event) => event.stopPropagation()}>
+            <div className="preview-heading">
+              <strong title={previewJob.originalName}>
+                {previewJob.originalName}
+              </strong>
+              <button
+                className="icon-button"
+                onClick={() => setPreviewJob(null)}
+                title="Close preview">
+                <X size={16} />
+              </button>
+            </div>
+            {previewJob.mimeType === "application/pdf" ? (
+              <iframe
+                className="preview-frame"
+                src={previewJob.previewUrl}
+                title={`Preview of ${previewJob.originalName}`}
+              />
+            ) : (
+              <img
+                className="preview-image"
+                src={previewJob.previewUrl}
+                alt={`Preview of ${previewJob.originalName}`}
+              />
+            )}
+          </section>
+        </div>
       )}
     </div>
   );

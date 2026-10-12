@@ -14,5 +14,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "start": "npm run start --workspace vendor-desktop",
     "package": "npm run package --workspace vendor-desktop"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "dotenv": "^18.0.7"
   }
 }

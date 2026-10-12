@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>PDF print renderer</title>
+    <style>
+      @page {
+        margin: 0;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: white;
+      }
+      .page {
+        break-after: page;
+        page-break-after: always;
+        overflow: hidden;
+      }
+      .page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="pages"></main>
+    <script type="module">
+      import * as pdfjsLib from "../node_modules/pdfjs-dist/build/pdf.mjs";
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "../node_modules/pdfjs-dist/build/pdf.worker.mjs";
+
+      window.renderPdf = async (base64) => {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1)
+          bytes[index] = binary.charCodeAt(index);
+
+        const document = await pdfjsLib.getDocument({ data: bytes }).promise;
+        const pages = document.numPages;
+        const container = document.getElementById("pages");
+        container.replaceChildren();
+
+        for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
+          const page = await document.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1 });
+          const wrapper = document.createElement("section");
+          const canvas = document.createElement("canvas");
+          const scale = 2;
+          const renderViewport = page.getViewport({ scale });
+
+          wrapper.className = "page";
+          wrapper.style.width = `${viewport.width / 72}in`;
+          wrapper.style.height = `${viewport.height / 72}in`;
+          canvas.width = renderViewport.width;
+          canvas.height = renderViewport.height;
+          canvas.style.width = `${viewport.width / 72}in`;
+          canvas.style.height = `${viewport.height / 72}in`;
+          wrapper.append(canvas);
+          container.append(wrapper);
+          await page.render({
+            canvasContext: canvas.getContext("2d"),
+            viewport: renderViewport,
+          }).promise;
+        }
+
+        return pages;
+      };
+
+      window.pdfReady = true;
+      window.dispatchEvent(new Event("pdf-ready"));
+    </script>
+  </body>
+</html>
