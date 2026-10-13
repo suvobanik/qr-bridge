@@ -2,7 +2,7 @@ import { Printer, LogIn, Download } from "lucide-react";
 
 export function GuestBrand() {
   return (
-    <header className="mb-2 flex w-full max-w-[420px] items-center justify-between gap-2 px-1 py-1">
+    <header className="mb-2 flex w-full max-w-110 items-center justify-between gap-2 px-1 py-1">
       {/* Brand logo & title */}
       <div className="flex items-center gap-2">
         <div>

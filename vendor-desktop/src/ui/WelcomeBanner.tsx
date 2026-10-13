@@ -1,34 +1,124 @@
-import { Printer, Sparkles } from "lucide-react";
+import { Printer } from "lucide-react";
 
-export function WelcomeBanner() {
+type VendorProfile = {
+  prop_name: string;
+  shop_name: string;
+  address: string;
+  offer: string;
+};
+
+type WelcomeBannerProps = {
+  profile: VendorProfile;
+  profileLoading: boolean;
+  profileSaving: boolean;
+  onProfileChange: (profile: VendorProfile) => void;
+  onSaveProfile: (event: React.FormEvent<HTMLFormElement>) => void;
+};
+
+export function WelcomeBanner({
+  profile,
+  profileLoading,
+  profileSaving,
+  onProfileChange,
+  onSaveProfile,
+}: WelcomeBannerProps) {
+  const fields: {
+    key: Exclude<keyof VendorProfile, "offer">;
+    label: string;
+  }[] = [
+    { key: "shop_name", label: "Shop name" },
+    { key: "prop_name", label: "Proprietor" },
+    { key: "address", label: "Shop address" },
+  ];
+
   return (
-    <section className="relative isolate flex items-center justify-between gap-4 overflow-hidden rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white via-orange-50/60 to-amber-100/70 my-4 px-4 shadow-sm sm:px-6 sm:py-5">
-      <div className="pointer-events-none absolute -right-8 -top-8 -z-10 h-36 w-36 rounded-full bg-orange-200/30 blur-3xl" />
+    <section className="my-3 rounded-2xl border border-black/[0.06] bg-gradient-to-br from-white via-orange-50/60 to-amber-100/70 p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-[9px] font-bold tracking-wider text-orange-700">
+            YOUR PRINTER, READY TO SHARE
+          </p>
 
-      <div className="relative z-10 min-w-0 flex-1">
-        <div className="mb-2 inline-flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold tracking-wider">
-          YOUR PRINTER, READY TO SHARE
+          <h1 className="text-xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-2xl">
+            Print without{" "}
+            <em className="font-serif font-medium text-orange-600">
+              the back-and-forth.
+            </em>
+          </h1>
+
+          <p className="mt-1 text-[11px] text-neutral-600">
+            Scan the QR, upload your file, and print.
+          </p>
         </div>
 
-        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-3xl">
-          Print without{" "}
-          <em className="font-serif font-medium text-orange-600">
-            the back-and-forth.
-          </em>
-        </h1>
-
-        <p className="mt-2 max-w-sm text-xs leading-5 text-neutral-600 sm:text-sm">
-          Scan the QR, upload your file, and let the printer do the rest.
-        </p>
-      </div>
-
-      <div
-        aria-hidden="true"
-        className="relative hidden h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-white/80 bg-white/65 shadow-sm backdrop-blur-sm sm:flex md:h-24 md:w-24">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-orange-500 to-orange-600 text-white shadow-md shadow-orange-600/20 md:h-14 md:w-14">
-          <Printer size={28} strokeWidth={1.6} />
+        <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/70 text-orange-600 shadow-sm sm:flex">
+          <Printer size={25} strokeWidth={1.6} />
         </div>
       </div>
+
+      <div className="my-3 border-t border-orange-200/70" />
+
+      <form onSubmit={onSaveProfile} className="flex flex-col gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+          {fields.map(({ key, label }) => (
+            <input
+              key={key}
+              aria-label={label}
+              placeholder={label}
+              value={profile[key]}
+              disabled={profileLoading || profileSaving}
+              onChange={(event) =>
+                onProfileChange({
+                  ...profile,
+                  [key]: event.target.value,
+                })
+              }
+              className="min-w-0 rounded-md border border-orange-200/80 bg-white/70 px-2.5 py-2 text-xs text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-orange-400 disabled:opacity-60"
+            />
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="vendor-offer"
+            className="text-[10px] font-semibold text-neutral-700">
+            Offers for Customers
+            <span className="ml-1 font-normal text-neutral-500">
+              (optional)
+            </span>
+          </label>
+
+          <textarea
+            id="vendor-offer"
+            aria-label="Offers for Customers"
+            placeholder="e.g. 10% off on printing, drink discounts on friday..."
+            value={profile.offer}
+            disabled={profileLoading || profileSaving}
+            rows={2}
+            maxLength={500}
+            onChange={(event) =>
+              onProfileChange({
+                ...profile,
+                offer: event.target.value,
+              })
+            }
+            className="min-w-0 resize-y rounded-md border border-orange-200/80 bg-white/70 px-2.5 py-2 text-xs text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-orange-400 disabled:opacity-60"
+          />
+
+          <p className="text-right text-[10px] text-neutral-500">
+            {profile.offer.length}/500
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={profileLoading || profileSaving}
+            className="shrink-0 rounded-md bg-neutral-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50">
+            {profileSaving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { User, MapPin } from "lucide-react";
+
 import { supabase } from "../../lib/supabase";
 import { GuestBrand } from "./GuestBrand";
 import { UploadForm } from "./UploadForm";
@@ -10,16 +11,13 @@ import type { Job } from "./UploadStatus";
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const CHUNK_SIZE = 256 * 1024;
 
-const ALLOWED_TYPES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-]);
+const ALLOWED_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 interface VendorProfile {
-  name?: string;
-  proprietor_name?: string;
-  address?: string;
+  shop_name?: string | null;
+  prop_name?: string | null;
+  address?: string | null;
+  offer?: string | null;
 }
 
 export function UploadPage() {
@@ -48,38 +46,68 @@ export function UploadPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
   const [vendor, setVendor] = useState<VendorProfile | null>(null);
+  const [vendorLoading, setVendorLoading] = useState(true);
 
+  // Load vendor details and establish the print connection.
   useEffect(() => {
+    let alive = true;
+
+    setVendor(null);
+    setVendorLoading(true);
+
     if (useCloudJobs) {
       if (!slug) {
         setAvailable(false);
         setError("This print station link is not configured correctly.");
+        setVendorLoading(false);
         return;
       }
 
       supabase!
         .from("vendor_profiles")
-        .select("id, name, proprietor_name, address")
+        .select("id, shop_name, prop_name, address, offer")
         .eq("slug", slug)
         .eq("accepting_jobs", true)
         .maybeSingle()
-        .then(({ data, error: profileError }) => {
-          if (profileError || !data) {
+        .then(
+          ({ data, error: profileError }) => {
+            if (!alive) return;
+
+            if (profileError || !data) {
+              setAvailable(false);
+              setError("This print station is currently unavailable.");
+              setVendorLoading(false);
+              return;
+            }
+
+            setVendor({
+              shop_name: data.shop_name,
+              prop_name: data.prop_name,
+              address: data.address,
+              offer: data.offer,
+            });
+
+            setAvailable(true);
+            setVendorLoading(false);
+          },
+          () => {
+            if (!alive) return;
+
             setAvailable(false);
-            setError("This print station is currently unavailable.");
-            return;
-          }
+            setError("Could not load this print station. Please try again.");
+            setVendorLoading(false);
+          },
+        );
 
-          setVendor(data as VendorProfile);
-          setAvailable(true);
-        });
-
-      return;
+      return () => {
+        alive = false;
+      };
     }
 
     if (!relayUrl || !slug) {
       setAvailable(false);
       setError("This print station link is not configured correctly.");
+      setVendorLoading(false);
       return;
     }
 
@@ -91,17 +119,26 @@ export function UploadPage() {
     socketRef.current = socket;
     socket.binaryType = "arraybuffer";
 
-    socket.onopen = () => setAvailable(true);
+    socket.onopen = () => {
+      if (alive) setAvailable(true);
+    };
 
     socket.onclose = () => {
-      setAvailable(false);
-      readyRef.current?.reject(
-        new Error("The print station is unavailable."),
-      );
+      if (alive) {
+        setAvailable(false);
+        setVendorLoading(false);
+      }
+
+      readyRef.current?.reject(new Error("The print station is unavailable."));
       readyRef.current = null;
     };
 
-    socket.onerror = () => setAvailable(false);
+    socket.onerror = () => {
+      if (!alive) return;
+
+      setAvailable(false);
+      setVendorLoading(false);
+    };
 
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") return;
@@ -116,8 +153,15 @@ export function UploadPage() {
         };
 
         if (message.type === "connected") {
+          if (!alive) return;
+
           setAvailable(true);
-          if (message.vendor) setVendor(message.vendor);
+
+          if (message.vendor) {
+            setVendor(message.vendor);
+          }
+
+          setVendorLoading(false);
         }
 
         if (message.type === "print:ready" && message.jobId) {
@@ -129,10 +173,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                ...current,
-                status: "received",
-                message: "File received by the print station.",
-              }
+                  ...current,
+                  status: "received",
+                  message: "File received by the print station.",
+                }
               : current,
           );
         }
@@ -141,10 +185,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                ...current,
-                status: "pending",
-                message: "Waiting for host approval.",
-              }
+                  ...current,
+                  status: "pending",
+                  message: "Waiting for host approval.",
+                }
               : current,
           );
         }
@@ -155,10 +199,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                ...current,
-                status: message.success ? "printed" : "failed",
-                message: message.message,
-              }
+                  ...current,
+                  status: message.success ? "printed" : "failed",
+                  message: message.message,
+                }
               : current,
           );
         }
@@ -178,9 +222,16 @@ export function UploadPage() {
     };
 
     return () => {
+      alive = false;
+
       readyRef.current?.reject(new Error("Connection closed."));
+      readyRef.current = null;
+
       socket.close();
-      socketRef.current = null;
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
   }, [relayUrl, slug, useCloudJobs]);
 
@@ -211,8 +262,7 @@ export function UploadPage() {
     if (!file || busy) return;
 
     if (
-      (!useCloudJobs &&
-        (!socket || socket.readyState !== WebSocket.OPEN)) ||
+      (!useCloudJobs && (!socket || socket.readyState !== WebSocket.OPEN)) ||
       available !== true
     ) {
       setError(
@@ -226,14 +276,16 @@ export function UploadPage() {
 
     try {
       if (useCloudJobs) {
-        const { data: reservation, error: reserveError } =
-          await supabase!.rpc("reserve_guest_print_job", {
+        const { data: reservation, error: reserveError } = await supabase!.rpc(
+          "reserve_guest_print_job",
+          {
             p_vendor_slug: slug,
             p_original_name: file.name,
             p_mime_type: file.type,
             p_file_size: file.size,
             p_print_settings: {},
-          });
+          },
+        );
 
         if (reserveError) throw reserveError;
 
@@ -285,13 +337,13 @@ export function UploadPage() {
       const ready = new Promise<string>((resolve, reject) => {
         readyRef.current = { resolve, reject };
 
-        window.setTimeout(
-          () =>
-            reject(
-              new Error("The print station did not accept the upload."),
-            ),
-          10000,
-        );
+        window.setTimeout(() => {
+          if (readyRef.current?.resolve === resolve) {
+            readyRef.current = null;
+
+            reject(new Error("The print station did not accept the upload."));
+          }
+        }, 10000);
       });
 
       socket.send(
@@ -336,6 +388,11 @@ export function UploadPage() {
     setError("");
   }
 
+  const shopName = vendor?.shop_name?.trim();
+  const proprietor = vendor?.prop_name?.trim();
+  const address = vendor?.address?.trim();
+  const offer = vendor?.offer?.trim();
+
   return (
     <main className="flex min-h-screen flex-col items-center bg-[#f7f5ed] px-3.5 pb-4 pt-2.5 sm:px-4">
       {/* Top Navbar */}
@@ -343,20 +400,48 @@ export function UploadPage() {
 
       <div className="w-full max-w-[440px] space-y-3">
         {/* Vendor Station Header Info */}
-        <section className="px-1 text-left">
-          <h2 className="text-[22px] font-extrabold tracking-tight text-[#14232c] leading-tight">
-            {vendor?.name || "Campus Print Shop"}
-          </h2>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#5b6e76]">
-            <span className="flex items-center gap-1">
-              <User size={12} className="shrink-0 text-[#07866b]" />
-              <span>{vendor?.proprietor_name || "John Doe (Proprietor)"}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <MapPin size={12} className="shrink-0 text-[#07866b]" />
-              <span>{vendor?.address || "123 University Ave, Ground Floor"}</span>
-            </span>
-          </div>
+        <section
+          className="px-1 text-left"
+          aria-label="Vendor information"
+          aria-busy={vendorLoading}>
+          {vendorLoading ? (
+            <div className="animate-pulse space-y-2 py-0.5" aria-hidden="true">
+              {/* Shop name skeleton */}
+              <div className="h-6 w-44 max-w-full rounded-md bg-[#e5e7eb]" />
+
+              {/* Proprietor and address skeletons */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="h-3 w-24 rounded bg-[#e5e7eb]" />
+                <div className="h-3 w-36 max-w-full rounded bg-[#e5e7eb]" />
+              </div>
+            </div>
+          ) : (
+            <>
+              {shopName && (
+                <h2 className="text-[22px] font-extrabold leading-tight tracking-tight text-[#14232c]">
+                  {shopName}
+                </h2>
+              )}
+
+              {(proprietor || address) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#5b6e76]">
+                  {proprietor && (
+                    <span className="flex items-center gap-1">
+                      <User size={12} className="shrink-0 text-[#07866b]" />
+                      <span>{proprietor}</span>
+                    </span>
+                  )}
+
+                  {address && (
+                    <span className="flex items-center gap-1">
+                      <MapPin size={12} className="shrink-0 text-[#07866b]" />
+                      <span>{address}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </section>
 
         {/* Compact Upload Card */}
@@ -379,16 +464,49 @@ export function UploadPage() {
           )}
         </section>
 
-        <hr />
+        <hr className="border-0 border-t border-[#e8e4d8]" />
 
         {/* Advertisement Space */}
         <aside
           aria-label="Advertisement"
-          className="flex min-h-[140px] items-center justify-center rounded-2xl border border-[#ded8c8] bg-[#ede8d8]/60 p-4 text-center transition-colors"
-        >
-          <span className="text-[11px] font-bold tracking-wider text-[#8b8577] uppercase">
+          className="flex min-h-[140px] items-center justify-center rounded-2xl border border-[#ded8c8] bg-[#ede8d8]/60 p-4 text-center transition-colors">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-[#8b8577]" />
+        </aside>
 
-          </span>
+        {/* Customer Offers */}
+        {!vendorLoading && offer && (
+          <section
+            aria-label="Offers for customers"
+            className="rounded-2xl border border-orange-200/80 bg-gradient-to-br from-white via-orange-50/70 to-amber-100/60 p-4 shadow-sm">
+            <hr className="border-0 border-t border-[#e8e4d8]" />
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-lg">
+                🎁
+              </span>
+
+              <div>
+                <h2 className="text-sm font-extrabold tracking-tight text-[#14232c]">
+                  Offers for You
+                </h2>
+                <p className="text-[10px] text-[#8b6b4a]">
+                  Special deals from this print shop
+                </p>
+              </div>
+            </div>
+
+            <p className="whitespace-pre-line break-words text-xs leading-relaxed text-[#5b5147]">
+              {offer}
+            </p>
+          </section>
+        )}
+
+        <hr className="border-0 border-t border-[#e8e4d8]" />
+
+        {/* Advertisement Space */}
+        <aside
+          aria-label="Advertisement"
+          className="flex min-h-[140px] items-center justify-center rounded-2xl border border-[#ded8c8] bg-[#ede8d8]/60 p-4 text-center transition-colors">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-[#8b8577]" />
         </aside>
       </div>
     </main>
