@@ -7,6 +7,10 @@ interface Window {
     reject: (id: string) => Promise<any>;
     clearCompleted: () => Promise<any>;
     refreshPrinters: () => Promise<any>;
+    openQrPreview: (
+      qr: string,
+      guestUrl: string,
+    ) => Promise<{ success: boolean }>;
     queueCloudJob: (
       metadata: {
         jobId: string;

@@ -10,6 +10,41 @@ let pdfPrintWindow;
 
 const isDev = !app.isPackaged;
 
+async function openQrPrintWindow(qr, guestUrl) {
+  const qrWindow = new BrowserWindow({
+    width: 850,
+    height: 900,
+    minWidth: 600,
+    minHeight: 650,
+    title: "QR Print Preview",
+    backgroundColor: "#f3f5f9",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "qr-print-preload.cjs"),
+    },
+  });
+
+  try {
+    await qrWindow.loadFile(path.join(__dirname, "qr-print.html"));
+
+    // Send data after the preview page has loaded.
+    qrWindow.webContents.send("qr-preview:set-data", {
+      qr,
+      guestUrl,
+    });
+
+    return qrWindow;
+  } catch (error) {
+    if (!qrWindow.isDestroyed()) {
+      qrWindow.close();
+    }
+
+    throw error;
+  }
+}
+
 async function printPdf(filePath, printerName, options) {
   const pdfWindow = new BrowserWindow({
     show: false,
@@ -54,14 +89,19 @@ async function printPdf(filePath, printerName, options) {
           margins: { marginType: "none" },
           printBackground: false,
         },
-        (success, failureReason) =>
-          success
-            ? resolve()
-            : reject(new Error(failureReason || "PDF printing failed.")),
+        (success, failureReason) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(failureReason || "PDF printing failed."));
+          }
+        },
       );
     });
   } finally {
-    if (!pdfWindow.isDestroyed()) pdfWindow.destroy();
+    if (!pdfWindow.isDestroyed()) {
+      pdfWindow.destroy();
+    }
 
     if (pdfPrintWindow === pdfWindow) {
       pdfPrintWindow = undefined;
@@ -104,7 +144,7 @@ async function createWindow() {
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http")) {
+    if (url.startsWith("https://") || url.startsWith("http://")) {
       shell.openExternal(url);
     }
 
@@ -115,15 +155,25 @@ async function createWindow() {
 app.whenReady().then(async () => {
   host = await startHost({
     getLanIPv4,
-    onChange: () => mainWindow?.webContents.send("host:changed"),
+
+    onChange: () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("host:changed");
+      }
+    },
+
     printPdf,
-    onRelayResult: (job) =>
-      mainWindow?.webContents.send("relay:result", {
-        jobId: job.id,
-        success: job.status === "printed",
-        status: job.status,
-        message: job.message,
-      }),
+
+    onRelayResult: (job) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("relay:result", {
+          jobId: job.id,
+          success: job.status === "printed",
+          status: job.status,
+          message: job.message,
+        });
+      }
+    },
   });
 
   await createWindow();
@@ -147,6 +197,7 @@ app.on("before-quit", async () => {
   }
 });
 
+// Host and job IPC handlers
 ipcMain.handle("host:get-state", () => host.getState());
 
 ipcMain.handle("host:clear-completed", () => host.clearCompleted());
@@ -166,3 +217,58 @@ ipcMain.handle("host:relay-chunk", (_, id, chunk) =>
 ipcMain.handle("host:relay-end", (_, id) => host.relayEnd(id));
 
 ipcMain.handle("host:relay-cancel", (_, id) => host.relayCancel(id));
+
+// Open the visible QR preview window.
+// This handler does NOT initiate printing.
+ipcMain.handle("host:open-qr-preview", async (_, qr, guestUrl) => {
+  if (
+    typeof qr !== "string" ||
+    !qr.startsWith("data:image/") ||
+    typeof guestUrl !== "string" ||
+    !guestUrl.trim()
+  ) {
+    throw new Error("Invalid QR preview data.");
+  }
+
+  await openQrPrintWindow(qr, guestUrl);
+
+  // IPC responses must be serializable; do not return BrowserWindow.
+  return { success: true };
+});
+
+// Open the native print dialog from inside the QR preview window.
+ipcMain.handle("host:qr-print-dialog", async (event) => {
+  const printWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (!printWindow || printWindow.isDestroyed()) {
+    throw new Error("QR preview window is unavailable.");
+  }
+
+  return new Promise((resolve) => {
+    printWindow.webContents.print(
+      {
+        silent: false,
+        printBackground: true,
+      },
+      (success, failureReason) => {
+        resolve({
+          success,
+          error: success
+            ? undefined
+            : failureReason || "Printing was cancelled or failed.",
+        });
+      },
+    );
+  });
+});
+
+// Close the QR preview window.
+ipcMain.handle("host:qr-close-preview", (event) => {
+  const qrWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (qrWindow && !qrWindow.isDestroyed()) {
+    qrWindow.close();
+  }
+
+  return { success: true };
+});

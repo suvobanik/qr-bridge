@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Print QR - QR Print Bridge</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 32px;
+        background: #f3f5f9;
+        color: #172033;
+        font-family: Arial, sans-serif;
+      }
+
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        max-width: 760px;
+        margin: 0 auto 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      button {
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .print-button {
+        background: #0a9b7d;
+        color: white;
+      }
+
+      .close-button {
+        background: white;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+      }
+
+      .paper {
+        max-width: 760px;
+        min-height: 650px;
+        margin: 0 auto;
+        padding: 48px 36px;
+        border: 1px solid #e5eaf0;
+        border-radius: 14px;
+        background: white;
+        box-shadow: 0 8px 30px #1720330d;
+        text-align: center;
+      }
+
+      .paper h2 {
+        margin: 0 0 8px;
+        font-size: 32px;
+      }
+
+      .subtitle {
+        margin: 0 0 32px;
+        color: #647184;
+      }
+
+      #qr {
+        display: block;
+        width: 280px;
+        height: 280px;
+        margin: 0 auto 24px;
+        object-fit: contain;
+      }
+
+      .instruction {
+        margin: 0 0 18px;
+        font-size: 16px;
+      }
+
+      #guest-url {
+        overflow-wrap: anywhere;
+        padding: 14px;
+        border: 1px solid #e5eaf0;
+        border-radius: 8px;
+        background: #f7f9fb;
+        color: #475569;
+        font-size: 12px;
+      }
+
+      .footer {
+        margin-top: 28px;
+        color: #647184;
+        font-size: 12px;
+      }
+
+      @media print {
+        body {
+          min-height: auto;
+          padding: 0;
+          background: white;
+        }
+
+        .toolbar {
+          display: none;
+        }
+
+        .paper {
+          max-width: none;
+          min-height: auto;
+          padding: 24px 12px;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+
+        #qr {
+          width: 260px;
+          height: 260px;
+        }
+
+        @page {
+          margin: 12mm;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="toolbar">
+      <h1>QR Print Preview</h1>
+
+      <div class="actions">
+        <button class="close-button" id="close">Close</button>
+        <button class="print-button" id="print">Print QR</button>
+      </div>
+    </header>
+
+    <main class="paper">
+      <h2>Scan to Print</h2>
+      <p class="subtitle">QR Print Bridge</p>
+
+      <img id="qr" alt="Guest upload QR code" />
+
+      <p class="instruction">
+        Scan this QR code with your phone camera to upload a file.
+      </p>
+
+      <div id="guest-url"></div>
+
+      <p class="footer">
+        Open the link, select your file, and upload it for printing.
+      </p>
+    </main>
+
+    <script>
+      window.qrPrintHost.onData(({ qr, guestUrl }) => {
+        document.getElementById("qr").src = qr;
+        document.getElementById("guest-url").textContent = guestUrl;
+      });
+
+      document.getElementById("print").addEventListener("click", async () => {
+        const result = await window.qrPrintHost.print();
+
+        if (!result.success && result.error) {
+          window.alert(`Printing failed: ${result.error}`);
+        }
+      });
+
+      document.getElementById("close").addEventListener("click", () => {
+        window.qrPrintHost.close();
+      });
+    </script>
+  </body>
+</html>
