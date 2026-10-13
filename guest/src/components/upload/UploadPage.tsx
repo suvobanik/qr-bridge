@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
+import { User, MapPin } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { GuestBrand } from "./GuestBrand";
-import { GuestPrivacyNote } from "./GuestPrivacyNote";
 import { UploadForm } from "./UploadForm";
 import { UploadStatus } from "./UploadStatus";
 import type { Job } from "./UploadStatus";
@@ -15,6 +15,12 @@ const ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/png",
 ]);
+
+interface VendorProfile {
+  name?: string;
+  proprietor_name?: string;
+  address?: string;
+}
 
 export function UploadPage() {
   const routeParts = window.location.pathname.split("/").filter(Boolean);
@@ -41,6 +47,7 @@ export function UploadPage() {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
+  const [vendor, setVendor] = useState<VendorProfile | null>(null);
 
   useEffect(() => {
     if (useCloudJobs) {
@@ -52,7 +59,7 @@ export function UploadPage() {
 
       supabase!
         .from("vendor_profiles")
-        .select("id")
+        .select("id, name, proprietor_name, address")
         .eq("slug", slug)
         .eq("accepting_jobs", true)
         .maybeSingle()
@@ -63,6 +70,7 @@ export function UploadPage() {
             return;
           }
 
+          setVendor(data as VendorProfile);
           setAvailable(true);
         });
 
@@ -104,10 +112,12 @@ export function UploadPage() {
           jobId?: string;
           success?: boolean;
           message?: string;
+          vendor?: VendorProfile;
         };
 
         if (message.type === "connected") {
           setAvailable(true);
+          if (message.vendor) setVendor(message.vendor);
         }
 
         if (message.type === "print:ready" && message.jobId) {
@@ -119,10 +129,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                  ...current,
-                  status: "received",
-                  message: "File received by the print station.",
-                }
+                ...current,
+                status: "received",
+                message: "File received by the print station.",
+              }
               : current,
           );
         }
@@ -131,10 +141,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                  ...current,
-                  status: "pending",
-                  message: "Waiting for host approval.",
-                }
+                ...current,
+                status: "pending",
+                message: "Waiting for host approval.",
+              }
               : current,
           );
         }
@@ -145,10 +155,10 @@ export function UploadPage() {
           setJob((current) =>
             current
               ? {
-                  ...current,
-                  status: message.success ? "printed" : "failed",
-                  message: message.message,
-                }
+                ...current,
+                status: message.success ? "printed" : "failed",
+                message: message.message,
+              }
               : current,
           );
         }
@@ -327,41 +337,60 @@ export function UploadPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 pb-3 pt-3 sm:px-[18px] sm:pt-4">
+    <main className="flex min-h-screen flex-col items-center bg-[#f7f5ed] px-3.5 pb-4 pt-2.5 sm:px-4">
+      {/* Top Navbar */}
       <GuestBrand />
 
-      <section className="w-full max-w-[440px] rounded-[20px] border border-[#e7ebf1] bg-white px-5 pb-4 pt-4 shadow-[0_8px_28px_#17203308] max-[400px]:px-4 max-[400px]:py-4">
-        <div className="mb-2 flex items-center gap-1.5 text-[9px] font-extrabold tracking-[1.1px] text-[#0a9b7d]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-          Send PDF/file directly to the
-          station&apos;s printer.
-        </div>
+      <div className="w-full max-w-[440px] space-y-3">
+        {/* Vendor Station Header Info */}
+        <section className="px-1 text-left">
+          <h2 className="text-[22px] font-extrabold tracking-tight text-[#14232c] leading-tight">
+            {vendor?.name || "Campus Print Shop"}
+          </h2>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#5b6e76]">
+            <span className="flex items-center gap-1">
+              <User size={12} className="shrink-0 text-[#07866b]" />
+              <span>{vendor?.proprietor_name || "John Doe (Proprietor)"}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin size={12} className="shrink-0 text-[#07866b]" />
+              <span>{vendor?.address || "123 University Ave, Ground Floor"}</span>
+            </span>
+          </div>
+        </section>
 
-        <h1 className="mb-2 mt-0 font-display text-[32px] font-extrabold leading-[1.08] tracking-[-1.4px] text-[#172033] max-[400px]:text-[29px]">
-          Send it to
-          <br />
-          <em className="not-italic text-[#079879]">the printer.</em>
-        </h1>
+        {/* Compact Upload Card */}
+        <section className="rounded-2xl border border-[#e5ebe7] bg-white p-4 shadow-sm">
+          <h1 className="mb-3 text-[20px] font-extrabold tracking-tight text-[#14232c]">
+            Send it to the printer.
+          </h1>
 
-        {job ? (
-          <UploadStatus job={job} onSendAnother={resetUpload} />
-        ) : (
-          <UploadForm
-            file={file}
-            busy={busy}
-            available={available}
-            error={error}
-            onChoose={choose}
-            onSubmit={submit}
-          />
-        )}
+          {job ? (
+            <UploadStatus job={job} onSendAnother={resetUpload} />
+          ) : (
+            <UploadForm
+              file={file}
+              busy={busy}
+              available={available}
+              error={error}
+              onChoose={choose}
+              onSubmit={submit}
+            />
+          )}
+        </section>
 
-        <GuestPrivacyNote />
-      </section>
+        <hr />
 
-      <p className="mb-0 mt-3 text-center text-[10px] text-[#a0a9b4]">
-        No account. No app download. Just print.
-      </p>
+        {/* Advertisement Space */}
+        <aside
+          aria-label="Advertisement"
+          className="flex min-h-[140px] items-center justify-center rounded-2xl border border-[#ded8c8] bg-[#ede8d8]/60 p-4 text-center transition-colors"
+        >
+          <span className="text-[11px] font-bold tracking-wider text-[#8b8577] uppercase">
+
+          </span>
+        </aside>
+      </div>
     </main>
   );
 }

@@ -1,17 +1,43 @@
 import {
-  PackageCheck,
   Printer,
+  LogIn,
+  Download,
+  MapPin,
   QrCode,
-  Upload,
+  ArrowRight,
+  Sparkles,
+  Smartphone,
+  Laptop,
+  CheckCircle2,
+  TrendingUp,
 } from "lucide-react";
 
 export function LandingPage() {
   return (
-    <main className="min-h-screen bg-[#f7f3ed] px-5 text-[#102a43] sm:px-[6vw]">
-      <LandingNavigation />
-      <LandingHero />
-      <PrintSteps />
-      <LandingFooter />
+    <main className="min-h-screen bg-[#f7f5ed] px-4 py-4 text-[#14232c] sm:px-8 sm:py-6">
+      <div className="mx-auto flex min-h-[96vh] max-w-[1040px] flex-col justify-between">
+
+        {/* Navigation Bar */}
+        <LandingNavigation />
+
+        {/* Main Content Area */}
+        <div className="my-auto space-y-7 py-6 sm:space-y-8">
+          <HeroWithCenterActions />
+          <VisualBenefitsGrid />
+          <VendorPreviewStrip />
+        </div>
+
+        {/* Bottom Ad Space */}
+        <footer className="mt-4 pb-2">
+          <div
+            aria-label=""
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-[#ded8c8] bg-[#ede8d8]/65 text-center text-[10.5px] font-bold tracking-widest text-[#8b8577] uppercase transition-colors"
+          >
+            ADVERTISEMENT SPACE
+          </div>
+        </footer>
+
+      </div>
     </main>
   );
 }
@@ -19,191 +45,169 @@ export function LandingPage() {
 function LandingNavigation() {
   return (
     <nav
-      className="mx-auto flex h-[70px] w-full max-w-[1180px] items-center justify-between border-b border-[#deddd8] sm:h-[82px]"
+      className="flex w-full items-center justify-between border-b border-[#e2ded2] pb-3"
       aria-label="Main navigation"
     >
       <a
-        className="inline-flex items-center gap-[10px] font-display text-[17px] font-bold tracking-[-0.5px] text-[#102a43] no-underline transition-colors hover:text-[#2471b8]"
         href="/"
-        aria-label="Espresso Print home"
+        className="inline-flex items-center gap-2 font-display text-[17px] font-extrabold tracking-tight text-[#14232c] no-underline"
       >
-        <span className="grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-[#dcecf8] text-[#2471b8]">
-          <Printer size={18} />
-        </span>
-
         <span>
-          espresso <strong className="text-[#2471b8]">print</strong>
+          espresso<strong className="text-[#07866b]">print</strong>
         </span>
       </a>
 
-      <a
-        className="text-xs font-bold text-[#53687b] no-underline transition-colors hover:text-[#2471b8]"
-        href="#how-it-works"
-      >
-        How it works
-      </a>
+      <div className="flex items-center gap-2">
+        <a
+          href="/v/demo"
+          className="text-xs font-semibold text-[#5b6e76] transition-colors hover:text-[#07866b]"
+        >
+          Customer Demo
+        </a>
+      </div>
     </nav>
   );
 }
 
-function LandingHero() {
+function HeroWithCenterActions() {
   return (
-    <section className="mx-auto grid min-h-0 w-full max-w-[1180px] items-center gap-[7vw] py-[66px] pb-[78px] sm:min-h-[590px] sm:grid-cols-[minmax(0,1fr)_minmax(360px,0.82fr)] sm:py-[76px] sm:pb-[92px]">
-      <div className="max-w-[620px]">
-        <p className="mb-5 flex items-center gap-[9px] text-[10px] font-extrabold tracking-[1.6px] text-[#2471b8]">
-          <span className="h-[7px] w-[7px] rounded-full bg-[#2471b8]" />
-          SIMPLE PRINTING, WHEREVER YOU ARE
-        </p>
+    <section className="text-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f6f0] px-3.5 py-1 text-[10.5px] font-bold uppercase tracking-wider text-[#07866b]">
 
-        <h1 className="m-0 max-w-[630px] font-display text-[47px] font-extrabold leading-[1.04] tracking-[-2px] text-[#102a43] sm:text-[clamp(42px,5.4vw,74px)] sm:tracking-[-3px]">
-          Your documents. Printed in minutes.
-        </h1>
+        <span>Empowering Local Print Shops & Cyber Cafés</span>
+      </div>
 
-        <p className="my-[25px] mb-[29px] max-w-[480px] text-sm leading-[1.7] text-[#62788b] sm:text-base">
-          Scan a print shop&apos;s QR code, upload your file from your phone,
-          and collect your pages when they&apos;re ready. No app or account
-          required.
-        </p>
+      <h1 className="mx-auto mt-3 max-w-[700px] text-[34px] font-black tracking-tight text-[#102434] sm:text-[46px] leading-[1.08]">
+        Supercharge Your Print Shop.
+      </h1>
 
+      <p className="mx-auto mt-2.5 max-w-[560px] text-xs leading-relaxed text-[#5b6e76] sm:text-[14px]">
+        No more taking files over WhatsApp or email. Let nearby customers send print jobs right to your counter.
+      </p>
+
+      {/* HIGHLIGHTED CENTER ACTION BUTTONS */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <a
-          className="inline-flex items-center gap-3 rounded-[9px] bg-[#2471b8] px-[19px] py-[14px] text-[13px] font-bold text-white no-underline shadow-[0_8px_18px_#2471b82b] transition-all hover:-translate-y-0.5 hover:bg-[#1e609d] hover:shadow-[0_10px_22px_#2471b83b]"
-          href="#how-it-works"
+          href="/download"
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#07866b] px-6 text-[13px] font-bold text-white no-underline shadow-sm transition-all hover:bg-[#06725b] hover:shadow-md active:scale-[0.98]"
         >
-          See how it works
-          <span className="text-[19px] leading-none" aria-hidden="true">
-            →
-          </span>
+          <Download size={17} />
+          <span>Download App (Windows)</span>
         </a>
-
-        <p className="mt-5 text-[11px] text-[#7c8c98]">
-          At a print shop? Scan its QR code to get started.
-        </p>
+        {/* 
+        <a
+          href="/login"
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-[#cbd8d2] bg-white px-6 text-[13px] font-bold text-[#14232c] no-underline shadow-xs transition-colors hover:bg-[#f6faf8] active:scale-[0.98]"
+        >
+          <LogIn size={16} className="text-[#07866b]" />
+          <span>Vendor Login</span>
+        </a> */}
       </div>
-
-      <LandingVisual />
     </section>
   );
 }
 
-function LandingVisual() {
+function VisualBenefitsGrid() {
   return (
-    <div
-      className="relative mt-[34px] grid min-h-[350px] place-items-center sm:mt-0 sm:min-h-[390px]"
-      aria-hidden="true"
-    >
-      <div className="absolute aspect-[0.74] w-[min(290px,72%)] translate-x-[31px] translate-y-[-17px] rotate-[8deg] rounded-[3px] border border-[#d7dfe4] bg-[#e9f1f5] shadow-[0_20px_35px_#102a4317]" />
-
-      <div className="absolute z-[1] aspect-[0.74] w-[min(290px,72%)] rotate-[-5deg] rounded-[3px] border border-[#d7dfe4] bg-[#fffefa] px-[25px] py-[27px] shadow-[0_20px_35px_#102a4317]">
-        <div className="mb-[22px] h-[5px] w-[35px] rounded-[2px] bg-[#2471b8]" />
-
-        <div className="mb-3 h-[14px] w-[58%] rounded-[2px] bg-[#102a43]" />
-
-        <div className="mb-3 h-[7px] w-[88%] rounded-[2px] bg-[#c9d9e4]" />
-
-        <div className="mb-3 h-[7px] w-3/4 rounded-[2px] bg-[#c9d9e4]" />
-
-        <div className="mb-3 h-[7px] w-[52%] rounded-[2px] bg-[#c9d9e4]" />
-
-        <div className="mx-auto my-[24px] mb-[19px] grid h-[100px] w-[100px] place-items-center border-[7px] border-[#e1edf5] text-[#102a43]">
-          <QrCode size={82} strokeWidth={1.25} />
+    <section className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+      {/* Visual Benefit 3: Local Marketing Badge */}
+      <div className="flex flex-col justify-between rounded-2xl border border-[#e5ebe7] bg-white p-4 shadow-2xs">
+        {/* Graphic */}
+        <div className="flex h-28 w-full items-center justify-center rounded-xl bg-[#faf5f0] border border-[#ede3d8]">
+          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-xs border border-[#eadfd4]">
+            <MapPin size={22} className="text-[#c0392b]" />
+            <div className="text-left">
+              <span className="block text-[10px] font-bold text-[#14232c]">Store Promoted</span>
+              <span className="block text-[8.5px] text-[#c0392b] font-medium">Shown to local students</span>
+            </div>
+          </div>
         </div>
-
-        <span className="mx-auto block w-max border border-[#8bb6d6] px-2 py-[5px] text-[7px] font-extrabold tracking-[1px] text-[#2471b8]">
-          READY TO PRINT
-        </span>
-      </div>
-
-      <div className="absolute bottom-3 right-0 z-[2] flex items-center gap-[7px] rounded-[7px] border border-[#d6e2e9] bg-[#fffefa] px-3 py-[9px] text-[10px] font-bold text-[#2471b8] shadow-[0_8px_18px_#102a4312]">
-        <Printer size={15} />
-        <span>Print shop ready</span>
-      </div>
-    </div>
-  );
-}
-
-function PrintSteps() {
-  return (
-    <section
-      className="mx-auto w-full max-w-[1180px] border-t border-[#deddd8] py-[70px] pb-[80px]"
-      id="how-it-works"
-    >
-      <div>
-        <p className="mb-5 flex items-center gap-[9px] text-[10px] font-extrabold tracking-[1.6px] text-[#2471b8]">
-          HOW IT WORKS
-        </p>
-
-        <h2 className="m-0 font-display text-[33px] tracking-[-1.2px] text-[#102a43]">
-          Three easy steps.
-        </h2>
-      </div>
-
-      <div className="mt-[38px] grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-6">
-        <article className="relative min-h-0 rounded-lg border border-[#deddd8] bg-[#fbf9f5] p-[19px] sm:min-h-[190px] sm:px-[25px] sm:py-6">
-          <div className="mb-[15px] grid h-[42px] w-[42px] place-items-center rounded-[10px] bg-[#dcecf8] text-[#2471b8] sm:mb-[21px]">
-            <QrCode size={21} />
-          </div>
-
-          <span className="absolute right-[19px] top-[21px] text-[10px] font-extrabold tracking-[1px] text-[#9baab4] sm:right-[25px] sm:top-[27px]">
-            01
-          </span>
-
-          <h3 className="mb-[7px] mt-0 font-display text-[17px] text-[#102a43]">
-            Scan QR
-          </h3>
-
-          <p className="m-0 max-w-[230px] text-xs leading-[1.6] text-[#6c7f8d]">
-            Find the Espresso Print code at your local print shop.
+        <div className="mt-3">
+          <h2 className="text-[13.5px] font-extrabold text-[#14232c]">
+            Free Counter Marketing
+          </h2>
+          <p className="mt-0.5 text-[11px] text-[#6b7f88]">
+            Feature your store on our local print network.
           </p>
-        </article>
-
-        <article className="relative min-h-0 rounded-lg border border-[#deddd8] bg-[#fbf9f5] p-[19px] sm:min-h-[190px] sm:px-[25px] sm:py-6">
-          <div className="mb-[15px] grid h-[42px] w-[42px] place-items-center rounded-[10px] bg-[#dcecf8] text-[#2471b8] sm:mb-[21px]">
-            <Upload size={21} />
-          </div>
-
-          <span className="absolute right-[19px] top-[21px] text-[10px] font-extrabold tracking-[1px] text-[#9baab4] sm:right-[25px] sm:top-[27px]">
-            02
-          </span>
-
-          <h3 className="mb-[7px] mt-0 font-display text-[17px] text-[#102a43]">
-            Upload file
-          </h3>
-
-          <p className="m-0 max-w-[230px] text-xs leading-[1.6] text-[#6c7f8d]">
-            Choose a PDF or image right from your phone.
-          </p>
-        </article>
-
-        <article className="relative min-h-0 rounded-lg border border-[#deddd8] bg-[#fbf9f5] p-[19px] sm:min-h-[190px] sm:px-[25px] sm:py-6">
-          <div className="mb-[15px] grid h-[42px] w-[42px] place-items-center rounded-[10px] bg-[#dcecf8] text-[#2471b8] sm:mb-[21px]">
-            <PackageCheck size={21} />
-          </div>
-
-          <span className="absolute right-[19px] top-[21px] text-[10px] font-extrabold tracking-[1px] text-[#9baab4] sm:right-[25px] sm:top-[27px]">
-            03
-          </span>
-
-          <h3 className="mb-[7px] mt-0 font-display text-[17px] text-[#102a43]">
-            Collect prints
-          </h3>
-
-          <p className="m-0 max-w-[230px] text-xs leading-[1.6] text-[#6c7f8d]">
-            Pick up your pages when the shop has finished printing.
-          </p>
-        </article>
+        </div>
       </div>
+
+      {/* Visual Benefit 1: Touchless Orders */}
+      <div className="flex flex-col justify-between rounded-2xl border border-[#e5ebe7] bg-white p-4 shadow-2xs">
+        {/* Graphic */}
+        <div className="flex h-28 w-full items-center justify-center rounded-xl bg-[#f0f9f5] border border-[#d8ebe2]">
+          <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-xs border border-[#e2ece7]">
+            <QrCode size={24} className="text-[#07866b]" />
+            <div className="text-left">
+              <span className="block text-[10px] font-bold text-[#14232c]">Scan &amp; Upload</span>
+              <span className="block text-[8.5px] text-[#07866b] font-medium">Instant phone transfer</span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3">
+          <h2 className="text-[13.5px] font-extrabold text-[#14232c]">
+            Zero-Contact Transfers
+          </h2>
+          <p className="mt-0.5 text-[11px] text-[#6b7f88]">
+            No mobile numbers or emails exchanged.
+          </p>
+        </div>
+      </div>
+
+      {/* Visual Benefit 2: Live Desktop Queue */}
+      <div className="flex flex-col justify-between rounded-2xl border border-[#e5ebe7] bg-white p-4 shadow-2xs">
+        {/* Graphic */}
+        <div className="flex h-28 w-full items-center justify-center rounded-xl bg-[#f0f6fa] border border-[#dbe6ee]">
+          <div className="w-[82%] space-y-1.5 rounded-xl bg-white p-2.5 shadow-xs border border-[#e0e8ed]">
+            <div className="flex items-center justify-between text-[9px] font-bold text-[#1e6ca8]">
+              <span className="flex items-center gap-1">
+                <Laptop size={11} /> Ready to Print
+              </span>
+              <span className="text-[#07866b]">Auto</span>
+            </div>
+            <div className="h-1.5 w-full rounded bg-[#e8eef2]" />
+            <div className="h-1.5 w-2/3 rounded bg-[#07866b]" />
+          </div>
+        </div>
+        <div className="mt-3">
+          <h2 className="text-[13.5px] font-extrabold text-[#14232c]">
+            Automated Desktop Queue
+          </h2>
+          <p className="mt-0.5 text-[11px] text-[#6b7f88]">
+            One click to print right from your PC.
+          </p>
+        </div>
+      </div>
+
+
     </section>
   );
 }
 
-function LandingFooter() {
+function VendorPreviewStrip() {
   return (
-    <footer className="mx-auto flex w-full max-w-[1180px] flex-col justify-between gap-4 border-t border-[#deddd8] py-6 pb-[31px] text-[10px] text-[#82909a] sm:flex-row">
-      <span className="font-display text-[13px] font-bold text-[#102a43]">
-        espresso <strong className="text-[#2471b8]">print</strong>
-      </span>
+    <section className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-[#e0e7e3] bg-white p-4 shadow-2xs sm:flex-row sm:p-5">
+      <div className="flex items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#dcf5ec] text-[#07866b]">
+          <TrendingUp size={20} />
+        </div>
+        <div className="text-left">
+          <h3 className="text-xs font-extrabold text-[#14232c] sm:text-[13px]">
+            Ready to speed up your counter line?
+          </h3>
+          <p className="text-[11px] text-[#6c7f8d]">
+            Free setup. Works alongside your existing Windows printer.
+          </p>
+        </div>
+      </div>
 
-      <span>Simple printing for real life.</span>
-    </footer>
+      <a
+        href="/vendor-signup"
+        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#14232c] px-4 text-xs font-bold text-white no-underline shadow-xs transition-colors hover:bg-[#20333f]"
+      >
+        <span>Partner with Us</span>
+        <ArrowRight size={13} />
+      </a>
+    </section>
   );
 }
