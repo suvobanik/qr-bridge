@@ -12,17 +12,9 @@ import { StationHeader } from "./StationHeader";
 import type { Job, State } from "./types";
 import { WelcomeBanner } from "./WelcomeBanner";
 // qrcode does not ship TypeScript declarations in this project.
-// @ts-expect-error The package API is used at runtime and is typed locally by its consumers.
+// @ts-expect-error — the package is used through its JavaScript API.
 import QRCode from "qrcode";
 import { X, CircleHelp } from "lucide-react";
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      [elementName: string]: any;
-    }
-  }
-}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -39,7 +31,6 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [previewJob, setPreviewJob] = useState<Job | null>(null);
-
   const [cloudJobsConnected, setCloudJobsConnected] = useState(false);
 
   const cloudJobsRef = useRef<VendorQueueJob[]>([]);
@@ -52,7 +43,9 @@ export default function App() {
         .filter((job) => !cloudJobIdsRef.current.has(job.id))
         .map((job) => [job.id, job]),
     );
+
     for (const job of cloudJobs) merged.set(job.id, job);
+
     return Array.from(merged.values()).sort(
       (left, right) =>
         new Date(right.createdAt).getTime() -
@@ -67,14 +60,17 @@ export default function App() {
       cloudJobIdsRef.current = new Set();
       return;
     }
+
     cloudJobsRef.current = [];
     cloudJobIdsRef.current = new Set();
+
     return connectVendorJobs(session.user.id, setCloudJobsConnected, (jobs) => {
       cloudJobsRef.current = jobs;
       cloudJobIdsRef.current = new Set([
         ...cloudJobIdsRef.current,
         ...jobs.map((job) => job.id),
       ]);
+
       setState((current) =>
         current ? { ...current, jobs: mergeJobs(current.jobs, jobs) } : current,
       );
@@ -86,19 +82,23 @@ export default function App() {
       setAuthLoading(false);
       return;
     }
+
     let alive = true;
+
     supabase.auth.getSession().then(({ data, error }) => {
       if (!alive) return;
       if (error) setAuthError(error.message);
       setSession(data.session);
       setAuthLoading(false);
     });
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setAuthLoading(false);
     });
+
     return () => {
       alive = false;
       subscription.unsubscribe();
@@ -108,9 +108,11 @@ export default function App() {
   async function submitAuth(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
+
     setAuthSubmitting(true);
     setAuthError("");
     setAuthNotice("");
+
     try {
       if (authMode === "signup") {
         const { data, error } = await supabase.auth.signUp({
@@ -120,7 +122,9 @@ export default function App() {
             data: { display_name: authName.trim() || "Print Vendor" },
           },
         });
+
         if (error) throw error;
+
         if (!data.session) {
           setAuthNotice(
             "Account created. Check your email to confirm it, then log in.",
@@ -134,6 +138,7 @@ export default function App() {
           email: authEmail.trim(),
           password: authPassword,
         });
+
         if (error) throw error;
       }
     } catch (error) {
@@ -149,7 +154,9 @@ export default function App() {
 
   async function signOut() {
     if (!supabase) return;
+
     const { error } = await supabase.auth.signOut();
+
     if (error) setNotice(error.message);
     else setNotice("You have been logged out.");
   }
@@ -184,7 +191,9 @@ export default function App() {
           guestBase.searchParams.set("slug", profile.slug);
         } else {
           const basePath = guestBase.pathname.replace(/\/$/, "");
-          guestBase.pathname = `${basePath}/v/${encodeURIComponent(profile.slug)}`;
+          guestBase.pathname = `${basePath}/v/${encodeURIComponent(
+            profile.slug,
+          )}`;
         }
 
         guestUrl = guestBase.toString();
@@ -222,33 +231,38 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+
     const unsubscribe = window.printHost.onChange(() => refresh());
     const timer = setInterval(refresh, 2500);
+
     return () => {
       clearInterval(timer);
       unsubscribe?.();
     };
   }, [session?.user.id]);
+
   const pending = useMemo(
-    () => state?.jobs.filter((j) => j.status === "pending").length || 0,
+    () => state?.jobs.filter((job) => job.status === "pending").length || 0,
     [state],
   );
+
   const done = useMemo(
     () =>
-      state?.jobs.filter((j) => ["printed", "rejected"].includes(j.status))
+      state?.jobs.filter((job) => ["printed", "rejected"].includes(job.status))
         .length || 0,
     [state],
   );
 
-  if (authLoading)
+  if (authLoading) {
     return (
       <LoadingScreen
         title="Restoring your session…"
         message="Checking whether you are already signed in."
       />
     );
+  }
 
-  if (!session)
+  if (!session) {
     return (
       <AuthScreen
         authMode={authMode}
@@ -270,17 +284,8 @@ export default function App() {
         onNameChange={setAuthName}
       />
     );
-
-  async function toggleAuto() {
-    if (!state) return;
-    await window.printHost.setAutoApprove(!state.autoApprove);
-    setNotice(
-      !state.autoApprove
-        ? "Auto-Approve enabled. New jobs will print without host approval."
-        : "Auto-Approve disabled. New jobs require host approval.",
-    );
-    refresh();
   }
+
   async function clearCompleted() {
     if (session && supabase) {
       const { error } = await supabase
@@ -288,28 +293,34 @@ export default function App() {
         .delete()
         .eq("vendor_id", session.user.id)
         .in("status", ["printed", "rejected"]);
+
       if (error) {
         setNotice(`Could not clear completed jobs: ${error.message}`);
         return;
       }
     }
+
     await window.printHost.clearCompleted();
     await refresh();
   }
+
   async function copyUrl() {
     if (!state) return;
+
     await navigator.clipboard.writeText(state.guestUrl);
     setNotice(
       "Permanent guest link copied. It works across different networks.",
     );
   }
-  if (loading || !state)
+
+  if (loading || !state) {
     return (
       <LoadingScreen
         title="Starting your print station…"
         message="Checking your local printer and preparing the QR session."
       />
     );
+  }
 
   return (
     <div className="min-h-screen">
@@ -318,35 +329,44 @@ export default function App() {
         cloudJobsConnected={cloudJobsConnected}
         onSignOut={signOut}
       />
+
       <main className="mx-auto max-w-[1120px] px-0 pb-[25px] pt-[39px] max-[1150px]:mx-7">
         <WelcomeBanner />
+
         <section className="grid grid-cols-1 gap-[18px] md:grid-cols-2">
           <QrPanel state={state} qr={qr} onCopyUrl={copyUrl} />
+
           <SettingsPanel
             state={state}
             pending={pending}
             done={done}
+            onToggleAuto={() =>
+              window.printHost.setAutoApprove(!state.autoApprove).then(refresh)
+            }
             onRefreshPrinters={() =>
               window.printHost.refreshPrinters().then(refresh)
             }
-            onToggleAuto={toggleAuto}
           />
         </section>
+
         <JobsPanel
           jobs={state.jobs}
           done={done}
           onClearCompleted={clearCompleted}
-          onApprove={(jobId) => window.printHost.approve(jobId)}
-          onReject={(jobId) => window.printHost.reject(jobId)}
           onPreview={setPreviewJob}
+          onApprove={refresh}
+          onReject={refresh}
         />
+
         <footer className="flex items-center justify-between px-[3px] pt-[22px] text-[10px] text-[#98a1ad]">
           <span>Made for quick, local printing.</span>
           <span className="flex items-center gap-1.5">
-            <CircleHelp size={14} /> Keep this app open while guests print.
+            <CircleHelp size={14} />
+            Keep this app open while guests print.
           </span>
         </footer>
       </main>
+
       {notice && (
         <button
           className="fixed bottom-[22px] right-6 flex max-w-[420px] items-center gap-3.5 rounded-[11px] border border-[#d8e9e3] bg-white px-[15px] py-[13px] text-left text-xs text-[#34594f] shadow-[0_8px_35px_#18223020]"
@@ -355,6 +375,7 @@ export default function App() {
           <X size={15} />
         </button>
       )}
+
       {previewJob && (
         <PreviewDialog job={previewJob} onClose={() => setPreviewJob(null)} />
       )}

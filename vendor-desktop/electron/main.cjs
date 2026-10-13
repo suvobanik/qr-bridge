@@ -7,6 +7,7 @@ const { startHost } = require("./server.cjs");
 let mainWindow;
 let host;
 let pdfPrintWindow;
+
 const isDev = !app.isPackaged;
 
 async function printPdf(filePath, printerName, options) {
@@ -17,9 +18,12 @@ async function printPdf(filePath, printerName, options) {
       sandbox: true,
     },
   });
+
   pdfPrintWindow = pdfWindow;
+
   try {
     await pdfWindow.loadFile(path.join(__dirname, "pdf-print.html"));
+
     await pdfWindow.webContents.executeJavaScript(
       `new Promise((resolve) => {
         if (window.pdfReady) resolve();
@@ -27,11 +31,14 @@ async function printPdf(filePath, printerName, options) {
       })`,
       true,
     );
+
     const base64 = fs.readFileSync(filePath).toString("base64");
+
     await pdfWindow.webContents.executeJavaScript(
       `window.renderPdf(${JSON.stringify(base64)})`,
       true,
     );
+
     await new Promise((resolve, reject) => {
       pdfWindow.webContents.print(
         {
@@ -55,17 +62,24 @@ async function printPdf(filePath, printerName, options) {
     });
   } finally {
     if (!pdfWindow.isDestroyed()) pdfWindow.destroy();
-    if (pdfPrintWindow === pdfWindow) pdfPrintWindow = undefined;
+
+    if (pdfPrintWindow === pdfWindow) {
+      pdfPrintWindow = undefined;
+    }
   }
 }
 
 function getLanIPv4() {
   const nets = os.networkInterfaces();
+
   for (const list of Object.values(nets)) {
     for (const net of list || []) {
-      if (net.family === "IPv4" && !net.internal) return net.address;
+      if (net.family === "IPv4" && !net.internal) {
+        return net.address;
+      }
     }
   }
+
   return "127.0.0.1";
 }
 
@@ -82,10 +96,18 @@ async function createWindow() {
       nodeIntegration: false,
     },
   });
-  if (isDev) await mainWindow.loadURL("http://localhost:5173");
-  else await mainWindow.loadURL("http://127.0.0.1:47831/");
+
+  if (isDev) {
+    await mainWindow.loadURL("http://localhost:5173");
+  } else {
+    await mainWindow.loadURL("http://127.0.0.1:47831/");
+  }
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http")) shell.openExternal(url);
+    if (url.startsWith("http")) {
+      shell.openExternal(url);
+    }
+
     return { action: "deny" };
   });
 }
@@ -103,32 +125,44 @@ app.whenReady().then(async () => {
         message: job.message,
       }),
   });
+
   await createWindow();
+
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 });
+
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
 });
+
 app.on("before-quit", async () => {
-  if (host) await host.close();
+  if (host) {
+    await host.close();
+  }
 });
 
 ipcMain.handle("host:get-state", () => host.getState());
-ipcMain.handle("host:set-auto-approve", (_, value) =>
-  host.setAutoApprove(Boolean(value)),
-);
-ipcMain.handle("host:approve", (_, id) => host.decideJob(id, true));
-ipcMain.handle("host:reject", (_, id) => host.decideJob(id, false));
+
 ipcMain.handle("host:clear-completed", () => host.clearCompleted());
+
 ipcMain.handle("host:refresh-printers", () => host.refreshPrinters());
+
 ipcMain.handle("host:queue-cloud-job", (_, metadata, data, printNow) =>
   host.queueCloudJob(metadata, Buffer.from(data), Boolean(printNow)),
 );
+
 ipcMain.handle("host:relay-start", (_, metadata) => host.relayStart(metadata));
+
 ipcMain.handle("host:relay-chunk", (_, id, chunk) =>
   host.relayChunk(id, Buffer.from(chunk)),
 );
+
 ipcMain.handle("host:relay-end", (_, id) => host.relayEnd(id));
+
 ipcMain.handle("host:relay-cancel", (_, id) => host.relayCancel(id));

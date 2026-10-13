@@ -1,24 +1,25 @@
-import { Check, FileText, Image as ImageIcon, Trash2, X } from "lucide-react";
+import { FileText, Image as ImageIcon, Trash2 } from "lucide-react";
 import type { Job } from "./types";
 
 type JobsPanelProps = {
   jobs: Job[];
   done: number;
   onClearCompleted: () => void;
-  onApprove: (jobId: string) => void;
-  onReject: (jobId: string) => void;
   onPreview: (job: Job) => void;
 };
 
 const statusLabel: Record<string, string> = {
-  pending: "Needs approval",
+  uploading: "Uploading",
+  pending: "Uploading",
   queued: "Queued",
   printing: "Printing",
   printed: "Submitted",
   rejected: "Rejected",
   failed: "Failed",
 };
+
 const statusStyles: Record<string, string> = {
+  uploading: "text-[#b67b1c] [&>span]:bg-[#e5a83f]",
   pending: "text-[#b67b1c] [&>span]:bg-[#e5a83f]",
   printed: "text-[#079879] [&>span]:bg-[#10b981]",
   failed: "text-[#cf5149] [&>span]:bg-[#e66b63]",
@@ -37,8 +38,6 @@ export function JobsPanel({
   jobs,
   done,
   onClearCompleted,
-  onApprove,
-  onReject,
   onPreview,
 }: JobsPanelProps) {
   return (
@@ -55,6 +54,7 @@ export function JobsPanel({
             {jobs.length}
           </span>
         </div>
+
         <button
           className="flex items-center gap-1.5 border-0 bg-transparent p-[7px] text-[11px] font-semibold text-[#687587] disabled:cursor-default disabled:opacity-40"
           onClick={onClearCompleted}
@@ -62,6 +62,7 @@ export function JobsPanel({
           <Trash2 size={14} /> Clear completed
         </button>
       </div>
+
       {jobs.length === 0 ? (
         <div className="py-7 pb-[35px] text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-[15px] bg-[#f0f8f5] text-[#0b9b7e]">
@@ -79,19 +80,25 @@ export function JobsPanel({
               className="flex min-h-[69px] items-center gap-3 border-t border-[#eff1f5]"
               key={job.id}>
               <div
-                className={`grid h-[39px] w-[39px] shrink-0 place-items-center rounded-[11px] ${job.mimeType === "application/pdf" ? "bg-[#fff0ed] text-[#d75b4c]" : "bg-[#eaf3ff] text-[#3c7ec4]"}`}>
+                className={`grid h-[39px] w-[39px] shrink-0 place-items-center rounded-[11px] ${
+                  job.mimeType === "application/pdf"
+                    ? "bg-[#fff0ed] text-[#d75b4c]"
+                    : "bg-[#eaf3ff] text-[#3c7ec4]"
+                }`}>
                 {job.mimeType === "application/pdf" ? (
                   <FileText size={20} />
                 ) : (
                   <ImageIcon size={20} />
                 )}
               </div>
+
               <div className="flex min-w-[150px] flex-1 flex-col gap-[5px]">
                 <strong
                   className="max-w-[310px] overflow-hidden text-ellipsis whitespace-nowrap text-xs"
                   title={job.originalName}>
                   {job.originalName}
                 </strong>
+
                 <span className="text-[10px] text-[#8b95a2]">
                   {formatSize(job.size)} ·{" "}
                   {new Date(job.createdAt).toLocaleTimeString([], {
@@ -100,39 +107,29 @@ export function JobsPanel({
                   })}
                 </span>
               </div>
+
               <div
-                className={`flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold ${statusStyles[job.status] || "text-[#9ba5b2] [&>span]:bg-[#9ba5b2]"}`}>
+                className={`flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold ${
+                  statusStyles[job.status] ||
+                  "text-[#9ba5b2] [&>span]:bg-[#9ba5b2]"
+                }`}>
                 <span className="h-1.5 w-1.5 rounded-full" />
                 {statusLabel[job.status] || job.status}
               </div>
+
               {job.previewUrl ? (
                 <button
-                  className="rounded-lg border border-[#d9e6e2] bg-[#f7fbfa] px-2.5 py-2 text-[10px] font-bold text-[#2e7565] whitespace-nowrap"
+                  className="whitespace-nowrap rounded-lg border border-[#d9e6e2] bg-[#f7fbfa] px-2.5 py-2 text-[10px] font-bold text-[#2e7565]"
                   onClick={() => onPreview(job)}>
                   Preview
                 </button>
               ) : null}
-              {job.status === "pending" ? (
-                <div className="flex items-center gap-[5px]">
-                  <button
-                    className="flex items-center gap-[5px] whitespace-nowrap rounded-lg border-0 bg-[#0a9b7d] px-2.5 py-[9px] text-[10px] font-bold text-white"
-                    onClick={() => onApprove(job.id)}>
-                    <Check size={15} /> Approve & print
-                  </button>
-                  <button
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#f1d8d6] bg-white text-[#cc5b54]"
-                    onClick={() => onReject(job.id)}
-                    aria-label="Reject job">
-                    <X size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="max-w-[230px] overflow-hidden text-ellipsis whitespace-nowrap text-right text-[10px] text-[#8b95a2]"
-                  title={job.message}>
-                  {job.message}
-                </div>
-              )}
+
+              <div
+                className="max-w-[230px] overflow-hidden text-ellipsis whitespace-nowrap text-right text-[10px] text-[#8b95a2]"
+                title={job.message}>
+                {job.message}
+              </div>
             </div>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 
 type PrintJob = {
   id: string;
+  vendor_id: string;
   storage_path: string;
   original_name: string;
   mime_type: string;
@@ -31,9 +32,6 @@ type JobResult = {
   message: string;
 };
 
-const JOB_COLUMNS =
-  "id,storage_path,original_name,mime_type,file_size,print_settings,status,created_at,result_message,error_message";
-
 export function connectVendorJobs(
   vendorId: string,
   onStatus: (connected: boolean) => void,
@@ -44,15 +42,14 @@ export function connectVendorJobs(
     return () => {};
   }
 
-  const client = supabase;
   let stopped = false;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let latestJobs: PrintJob[] = [];
-
   const processing = new Set<string>();
   const previewUrls = new Map<string, string>();
 
-  const channel = client.channel(`vendor-print-jobs-${vendorId}`).on(
+  let latestJobs: PrintJob[] = [];
+
+  const channel = supabase.channel(`vendor-print-jobs-${vendorId}`).on(
     "postgres_changes",
     {
       event: "*",
@@ -75,16 +72,17 @@ export function connectVendorJobs(
   }
 
   async function updateJob(id: string, values: Record<string, unknown>) {
-    const { error } = await client
+    const { error } = await supabase!
       .from("print_jobs")
       .update(values)
-      .eq("id", id);
+      .eq("id", id)
+      .eq("vendor_id", vendorId);
 
     return error;
   }
 
   function emitJobs(jobs: PrintJob[]) {
-    const currentIds = new Set(jobs.map(({ id }) => id));
+    const currentIds = new Set(jobs.map((job) => job.id));
 
     for (const [id, url] of previewUrls) {
       if (!currentIds.has(id)) {
@@ -102,45 +100,45 @@ export function connectVendorJobs(
         status: job.status,
         createdAt: job.created_at,
         message:
-          job.result_message ??
-          job.error_message ??
-          (job.status === "pending" ? "Waiting for host approval" : ""),
+          job.result_message ||
+          job.error_message ||
+          (job.status === "uploading"
+            ? "Uploading file…"
+            : job.status === "pending"
+              ? "Preparing file…"
+              : ""),
         previewUrl: previewUrls.get(job.id),
       })),
     );
   }
 
   async function finishJob(result: JobResult) {
-    let values: Record<string, unknown>;
+    const values = result.success
+      ? {
+          status: "printed",
+          result_message: result.message,
+          error_message: null,
+        }
+      : result.status === "rejected"
+        ? {
+            status: "rejected",
+            result_message: result.message,
+            error_message: null,
+          }
+        : {
+            status: "failed",
+            error_message: result.message,
+          };
 
-    if (result.success) {
-      values = {
-        status: "printed",
-        result_message: result.message,
-        error_message: null,
-      };
-    } else if (result.status === "rejected") {
-      values = {
-        status: "rejected",
-        result_message: result.message,
-        error_message: null,
-      };
-    } else {
-      values = {
-        status: "failed",
-        error_message: result.message,
-      };
-    }
+    const updateError = await updateJob(result.jobId, values);
 
-    const error = await updateJob(result.jobId, values);
-
-    if (error) {
+    if (updateError) {
       processing.delete(result.jobId);
       return;
     }
 
     if (result.success) {
-      const { data: job } = await client
+      const { data: job } = await supabase!
         .from("print_jobs")
         .select("storage_path")
         .eq("id", result.jobId)
@@ -148,11 +146,12 @@ export function connectVendorJobs(
         .maybeSingle();
 
       if (job?.storage_path) {
-        await client.storage.from("print-jobs").remove([job.storage_path]);
+        await supabase!.storage.from("print-jobs").remove([job.storage_path]);
       }
     }
 
     processing.delete(result.jobId);
+    void recover();
   }
 
   const unsubscribeRelayResult = window.printHost.onRelayResult(
@@ -169,26 +168,8 @@ export function connectVendorJobs(
     processing.add(job.id);
 
     try {
-      const { data: claimed, error } = await client
-        .from("print_jobs")
-        .update({
-          status: "queued",
-          error_message: null,
-        })
-        .eq("id", job.id)
-        .eq("vendor_id", vendorId)
-        .in("status", ["pending", "queued"])
-        .select("*")
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (!claimed) {
-        processing.delete(job.id);
-        return;
-      }
-
-      const { data: file, error: downloadError } = await client.storage
+      // Download and validate the file before changing its status to queued.
+      const { data: file, error: downloadError } = await supabase!.storage
         .from("print-jobs")
         .download(job.storage_path);
 
@@ -198,12 +179,42 @@ export function connectVendorJobs(
         throw new Error("Uploaded file is incomplete.");
       }
 
-      const previousUrl = previewUrls.get(job.id);
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      if (stopped) {
+        processing.delete(job.id);
+        return;
+      }
+
+      // Create the local preview before publishing the queued status.
+      const existingPreview = previewUrls.get(job.id);
+
+      if (existingPreview) {
+        URL.revokeObjectURL(existingPreview);
+      }
 
       previewUrls.set(job.id, URL.createObjectURL(file));
+
+      const queueError = await updateJob(job.id, {
+        status: "queued",
+        error_message: null,
+      });
+
+      if (queueError) throw queueError;
+
+      // Reflect the completed download immediately in the dashboard.
+      latestJobs = latestJobs.map((current) =>
+        current.id === job.id
+          ? {
+              ...current,
+              status: "queued",
+              error_message: null,
+            }
+          : current,
+      );
+
       emitJobs(latestJobs);
 
+      // Keep the existing host pipeline. Approval removal must be
+      // coordinated with the Electron implementation.
       await window.printHost.queueCloudJob(
         {
           jobId: job.id,
@@ -216,34 +227,39 @@ export function connectVendorJobs(
         job.status === "queued",
       );
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not prepare the file.";
+
       await updateJob(job.id, {
         status: "failed",
-        error_message:
-          error instanceof Error
-            ? error.message
-            : "Could not prepare the file.",
+        error_message: message,
       });
 
       processing.delete(job.id);
+      void recover();
     }
   }
 
   async function recover() {
     if (stopped) return;
 
-    const { data, error } = await client
+    const { data, error } = await supabase!
       .from("print_jobs")
-      .select(JOB_COLUMNS)
+      .select(
+        "id,vendor_id,storage_path,original_name,mime_type,file_size,print_settings,status,created_at,result_message,error_message",
+      )
       .eq("vendor_id", vendorId)
       .order("created_at", { ascending: true });
 
-    if (error) return;
+    if (error || stopped) return;
 
-    latestJobs = (data ?? []) as PrintJob[];
-    emitJobs(latestJobs);
+    const jobs = (data || []) as PrintJob[];
 
-    for (const job of latestJobs) {
-      if (job.status === "pending" || job.status === "queued") {
+    latestJobs = jobs;
+    emitJobs(jobs);
+
+    for (const job of jobs) {
+      if (["pending", "queued"].includes(job.status)) {
         void process(job);
       }
     }
@@ -251,6 +267,7 @@ export function connectVendorJobs(
 
   channel.subscribe((status) => {
     const connected = status === "SUBSCRIBED";
+
     setRealtimeStatus(connected);
 
     if (connected) void recover();
@@ -263,7 +280,7 @@ export function connectVendorJobs(
 
     if (pollTimer) clearInterval(pollTimer);
 
-    void client.removeChannel(channel);
+    void supabase!.removeChannel(channel);
     unsubscribeRelayResult();
 
     for (const url of previewUrls.values()) {
@@ -272,6 +289,7 @@ export function connectVendorJobs(
 
     previewUrls.clear();
     processing.clear();
+
     onStatus(false);
   };
 }
